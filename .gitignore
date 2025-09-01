@@ -20,3 +20,4 @@ output/
 data/
 *.csv
 .serena/
+.code-workspace
