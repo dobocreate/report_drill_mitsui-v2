@@ -235,9 +235,8 @@ def display_welcome():
 
 def display_main_content():
     """メインコンテンツ表示"""
-    # タブ作成（データ加工タブを追加）
-    # データ加工タブは処理済みデータがある場合のみ有効
-    tab_names = ["📊 データ概要", "🔧 ノイズ除去"]
+    # タブ作成（データ拡張タブを追加）
+    tab_names = ["📊 データ概要", "📏 データ拡張", "🔧 ノイズ除去"]
     
     if st.session_state.get('processed_data'):
         tab_names.append("✂️ データ加工")
@@ -248,20 +247,23 @@ def display_main_content():
     tab_names.append("📦 VTK生成")
     
     tabs = st.tabs(tab_names)
-    tab1, tab2 = tabs[0], tabs[1]
-    tab3 = tabs[2] if len(tabs) > 2 else None
+    tab1, tab2, tab3 = tabs[0], tabs[1], tabs[2]
     tab4 = tabs[3] if len(tabs) > 3 else None
+    tab5 = tabs[4] if len(tabs) > 4 else None
     
     with tab1:
         display_data_overview()
     
     with tab2:
-        display_noise_removal()
+        display_data_stretching()
     
     with tab3:
-        display_data_processing()
+        display_noise_removal()
     
     with tab4:
+        display_data_processing()
+    
+    with tab5:
         display_vtk_generation()
 
 def display_data_overview():
@@ -358,6 +360,217 @@ def sort_files_lmr(file_list):
             return 3  # Other files last
     
     return sorted(file_list, key=lambda x: (get_lmr_order(x), x))
+
+def display_data_stretching():
+    """データ拡張（スケーリング）処理"""
+    st.header("📏 データ拡張（スケーリング）")
+    
+    # データの存在確認
+    if 'raw_data' not in st.session_state or not st.session_state.raw_data:
+        st.warning("⚠️ データを読み込んでください")
+        return
+    
+    # DataProcessorを使用してLMR分類
+    processor = DataProcessor()
+    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
+    
+    # データストレッチャーのインポート
+    from src.data_stretcher import DataStretcher
+    stretcher = DataStretcher()
+    
+    # 使用するデータの選択
+    data_source = st.radio(
+        "使用するデータ",
+        ["元のデータ", "拡張済みデータ（存在する場合）"],
+        key="stretch_data_source"
+    )
+    
+    # データソースの決定
+    if data_source == "拡張済みデータ（存在する場合）" and 'stretched_data' in st.session_state:
+        current_data = st.session_state.stretched_data
+        st.info("📌 拡張済みデータを使用しています")
+    else:
+        current_data = base_data
+        if data_source == "拡張済みデータ（存在する場合）":
+            st.info("📌 拡張済みデータが存在しないため、元のデータを使用しています")
+    
+    # 現在のデータ情報を表示
+    st.subheader("現在のデータ情報")
+    current_info = []
+    for key in ['L', 'M', 'R']:
+        if key in current_data and current_data[key] is not None and not current_data[key].empty:
+            info = stretcher.get_scale_info(current_data[key])
+            current_info.append({
+                'データ': f'{key}側',
+                '最大長 (m)': f"{info['current_max_length']:.2f}",
+                '最小長 (m)': f"{info['current_min_length']:.2f}",
+                'データ点数': info['data_points']
+            })
+    
+    if current_info:
+        st.table(pd.DataFrame(current_info))
+    
+    # スケーリング設定
+    st.subheader("スケーリング設定")
+    
+    # 処理対象のデータを選択
+    st.write("**処理対象のデータを選択**")
+    available_keys = []
+    for key in ['L', 'M', 'R']:
+        if key in current_data and current_data[key] is not None and not current_data[key].empty:
+            available_keys.append(key)
+    
+    selected_keys = []
+    cols = st.columns(len(available_keys))
+    for idx, key in enumerate(available_keys):
+        with cols[idx]:
+            if st.checkbox(f"{key}側", value=True, key=f"select_{key}"):
+                selected_keys.append(key)
+    
+    if not selected_keys:
+        st.warning("⚠️ 少なくとも1つのデータを選択してください")
+        return
+    
+    st.divider()
+    
+    # 目標長の設定方法を選択
+    st.write("**目標長の設定**")
+    
+    # 一括設定モード
+    unified_mode = st.checkbox("すべて同じ目標長にする", value=False, key="unified_stretch")
+    
+    target_lengths = {}
+    
+    if unified_mode:
+        # 一括設定
+        target_length_all = st.number_input(
+            "共通の目標長さ (m)",
+            min_value=1.0,
+            max_value=100.0,
+            value=50.0,
+            step=0.5,
+            key="target_length_all"
+        )
+        target_lengths = {key: target_length_all for key in selected_keys}
+        
+        # 設定内容の確認表示
+        st.info(f"すべてのデータを {target_length_all:.1f}m に拡張します")
+    else:
+        # 個別設定
+        st.write("**各データの目標長を個別に設定**")
+        
+        # 選択されたデータの数に応じてカラム数を調整
+        cols = st.columns(len(selected_keys) if len(selected_keys) <= 3 else 3)
+        
+        for idx, key in enumerate(selected_keys):
+            col_idx = idx % len(cols)
+            with cols[col_idx]:
+                if key in current_data and current_data[key] is not None and not current_data[key].empty:
+                    current_max = current_data[key]['穿孔長'].max()
+                    current_min = current_data[key]['穿孔長'].min()
+                    
+                    st.write(f"**{key}側**")
+                    st.caption(f"現在: {current_min:.1f}〜{current_max:.1f}m")
+                    
+                    target_lengths[key] = st.number_input(
+                        f"目標長さ (m)",
+                        min_value=1.0,
+                        max_value=100.0,
+                        value=min(current_max * 1.5, 50.0),
+                        step=0.5,
+                        key=f"target_length_{key}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    # 拡張率を表示
+                    scale_factor = target_lengths[key] / current_max
+                    if scale_factor > 1:
+                        st.caption(f"↑ {scale_factor:.2f}倍に拡張")
+                    elif scale_factor < 1:
+                        st.caption(f"↓ {scale_factor:.2f}倍に縮小")
+                    else:
+                        st.caption("→ 変更なし")
+    
+    # スケーリング実行
+    if st.button("🔄 スケーリング実行", type="primary", key="execute_stretching"):
+        with st.spinner("スケーリング処理中..."):
+            try:
+                # 選択されたデータのみを処理
+                selected_data = {key: current_data[key] for key in selected_keys if key in current_data}
+                
+                # スケーリング実行
+                stretched_data = stretcher.stretch_multiple_data(selected_data, target_lengths)
+                
+                # 既存の拡張済みデータがある場合はマージ
+                if 'stretched_data' in st.session_state:
+                    # 既存データを保持し、新しい処理結果で更新
+                    merged_data = st.session_state.stretched_data.copy()
+                    merged_data.update(stretched_data)
+                    st.session_state.stretched_data = merged_data
+                else:
+                    # 元データをコピーして、処理したデータのみ更新
+                    st.session_state.stretched_data = base_data.copy()
+                    st.session_state.stretched_data.update(stretched_data)
+                
+                st.session_state.stretch_applied = True
+                
+                # 成功メッセージ
+                st.success(f"✅ 選択された{len(selected_keys)}個のデータのスケーリングが完了しました")
+                
+                # サマリー表示
+                st.subheader("スケーリング結果")
+                stretcher.display_scale_summary(selected_data, stretched_data)
+                
+                # グラフ表示
+                st.subheader("スケーリング前後の比較")
+                
+                from src.plotly_visualizer import PlotlyVisualizer
+                visualizer = PlotlyVisualizer()
+                
+                # 選択されたデータのみグラフ表示
+                for key in selected_keys:
+                    if key in selected_data and selected_data[key] is not None and not selected_data[key].empty:
+                        if key in stretched_data and stretched_data[key] is not None:
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write(f"**{key}側 - 元のデータ**")
+                                fig_original = visualizer.create_line_plot(
+                                    current_data[key],
+                                    title=f"{key}側 - 元のデータ",
+                                    x_col='穿孔長',
+                                    y_col='穿孔エネルギー',
+                                    height=400
+                                )
+                                st.plotly_chart(fig_original, use_container_width=True)
+                            
+                            with col2:
+                                st.write(f"**{key}側 - スケーリング後**")
+                                fig_stretched = visualizer.create_line_plot(
+                                    stretched_data[key],
+                                    title=f"{key}側 - スケーリング後",
+                                    x_col='穿孔長',
+                                    y_col='穿孔エネルギー',
+                                    height=400
+                                )
+                                st.plotly_chart(fig_stretched, use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"❌ エラーが発生しました: {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
+    
+    # 拡張済みデータが存在する場合、リセットオプションを表示
+    if 'stretched_data' in st.session_state:
+        st.divider()
+        st.subheader("リセットオプション")
+        
+        if st.button("🔄 すべての拡張データをリセット", key="reset_all"):
+            del st.session_state.stretched_data
+            if 'stretch_applied' in st.session_state:
+                del st.session_state.stretch_applied
+            st.success("✅ すべての拡張データをリセットしました")
+            st.rerun()
 
 def display_noise_removal():
     """ノイズ除去タブ（元スクリプトの機能を完全再現）"""

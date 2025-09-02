@@ -362,6 +362,63 @@ class PlotlyVisualizer:
         )
         
         return fig
+
+    def create_line_plot(self, data, title="Line Plot", x_col='穿孔長', y_col='穿孔エネルギー', height=600):
+        """
+        2Dラインプロットを作成
+        
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            プロットするデータ
+        title : str
+            プロットのタイトル
+        x_col : str
+            X軸に使用する列名
+        y_col : str
+            Y軸に使用する列名
+        height : int
+            プロットの高さ
+            
+        Returns:
+        --------
+        plotly.graph_objects.Figure
+        """
+        fig = go.Figure()
+        
+        # データが存在する場合のみプロット
+        if x_col in data.columns and y_col in data.columns:
+            fig.add_trace(go.Scatter(
+                x=data[x_col],
+                y=data[y_col],
+                mode='lines+markers',
+                name=title,
+                line=dict(
+                    color=self.color_palette[0],
+                    width=self.default_line_width
+                ),
+                marker=dict(
+                    size=self.default_marker_size,
+                    color=self.color_palette[0]
+                )
+            ))
+        
+        # レイアウトの設定
+        fig.update_layout(
+            title=title,
+            xaxis_title=x_col,
+            yaxis_title=y_col,
+            height=height,
+            template="plotly_white",
+            hovermode='x unified',
+            showlegend=False
+        )
+        
+        # グリッドの追加
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        
+        return fig
     
     def _extract_coordinates(
         self,

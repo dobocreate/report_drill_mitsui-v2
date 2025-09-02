@@ -14,6 +14,37 @@ class DataProcessor:
     
     def __init__(self):
         self.default_interval = 0.02  # デフォルトの間引き間隔（m）
+
+    def categorize_lmr_data(self, raw_data_dict):
+        """
+        生データをL/M/R別に分類
+        
+        Parameters:
+        -----------
+        raw_data_dict : dict
+            ファイル名をキーとするDataFrameの辞書
+        
+        Returns:
+        --------
+        dict
+            'L', 'M', 'R'をキーとするDataFrameの辞書
+        """
+        categorized_data = {'L': None, 'M': None, 'R': None}
+        
+        for filename, df in raw_data_dict.items():
+            if df is None or df.empty:
+                continue
+                
+            # ファイル名からL/M/Rを判定
+            filename_upper = filename.upper()
+            if '_L_' in filename_upper or filename_upper.endswith('_L.CSV'):
+                categorized_data['L'] = df
+            elif '_M_' in filename_upper or filename_upper.endswith('_M.CSV'):
+                categorized_data['M'] = df
+            elif '_R_' in filename_upper or filename_upper.endswith('_R.CSV'):
+                categorized_data['R'] = df
+        
+        return categorized_data
     
     def resample_data(
         self,

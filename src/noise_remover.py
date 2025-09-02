@@ -352,14 +352,20 @@ class NoiseRemover:
         combined_data = pd.DataFrame()
         
         for name, data in individual_results.items():
-            # 必要なカラムのみ抽出
-            required_cols = ['穿孔長', '穿孔エネルギー', 'Lowess_Trend']
-            available_cols = [col for col in required_cols if col in data.columns]
+            # 必要なカラムを指定の順序で抽出
+            # 順序: 穿孔長、穿孔エネルギー、Lowess_Trend
+            ordered_cols = []
+            if '穿孔長' in data.columns:
+                ordered_cols.append('穿孔長')
+            if '穿孔エネルギー' in data.columns:
+                ordered_cols.append('穿孔エネルギー')
+            if 'Lowess_Trend' in data.columns:
+                ordered_cols.append('Lowess_Trend')
             
-            if not available_cols:
+            if not ordered_cols:
                 continue
             
-            extracted_data = data[available_cols].copy()
+            extracted_data = data[ordered_cols].copy()
             
             # カラム名にファイル名を付与
             base_name = name.replace('.csv', '')
