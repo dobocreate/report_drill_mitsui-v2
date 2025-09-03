@@ -430,7 +430,6 @@ class VTKConverter:
         """
         base = os.path.basename(csv_file)
         name, _ = os.path.splitext(base)
-        parts = name.split('_')
         
         # LMRタイプを取得
         lmr_type = self.detect_lmr_type(csv_file)
@@ -439,12 +438,23 @@ class VTKConverter:
         
         # 日付文字列を生成
         date_str = "00.00.00"
+        
+        # アンダースコアで分割
+        parts = name.split('_')
+        
+        # YYYY_MM_DD_HH_MM_SS_L 形式を想定
         if len(parts) >= 3:
             try:
+                # 最初の3つの要素が年月日
                 year = parts[0]
                 month = parts[1]
                 day = parts[2]
-                if len(year) >= 2 and month.isdigit() and day.isdigit():
+                
+                # 数値として妥当かチェック
+                if (len(year) == 4 and year.isdigit() and 
+                    month.isdigit() and day.isdigit() and
+                    1 <= int(month) <= 12 and 1 <= int(day) <= 31):
+                    # YY.MM.DD形式に変換
                     date_str = f"{year[-2:]}.{month.zfill(2)}.{day.zfill(2)}"
             except:
                 pass
