@@ -576,96 +576,18 @@ def display_noise_removal():
     """ノイズ除去タブ（元スクリプトの機能を完全再現）"""
     st.header("🔧 ノイズ除去処理 - 穿孔エネルギー値")
     
-    # データの存在確認
-    if 'raw_data' not in st.session_state or not st.session_state.raw_data:
-        st.warning("⚠️ データを読み込んでください")
-        return
-    
-    # DataProcessorを使用してLMR分類
-    processor = DataProcessor()
-    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
-    
-    # 拡張済みデータの存在確認
-    has_stretched_data = 'stretched_data' in st.session_state
-    
-    # 各データタイプ（L/M/R）ごとのデータソース選択
-    st.subheader("📊 データソースの選択")
-    st.write("各データタイプごとに使用するデータソースを選択してください：")
-    
-    # 選択されたデータを格納する辞書
-    selected_data = {}
-    
-    # L/M/Rそれぞれの選択UI
-    cols = st.columns(3)
-    
-    for idx, key in enumerate(['L', 'M', 'R']):
-        with cols[idx]:
-            st.write(f"**{key}側データ**")
-            
-            # そのデータタイプが存在するかチェック
-            has_base = key in base_data and base_data[key] is not None and not base_data[key].empty
-            has_stretched = has_stretched_data and key in st.session_state.stretched_data and \
-                           st.session_state.stretched_data[key] is not None and \
-                           not st.session_state.stretched_data[key].empty
-            
-            if not has_base and not has_stretched:
-                st.warning(f"データなし")
-                selected_data[key] = None
-            else:
-                # 選択オプションを動的に作成
-                options = []
-                if has_base:
-                    options.append("元のデータ")
-                if has_stretched:
-                    options.append("拡張済みデータ")
-                
-                # デフォルト値は拡張済みがあれば拡張済み、なければ元のデータ
-                default_index = 1 if has_stretched and len(options) > 1 else 0
-                
-                # データソース選択
-                data_source = st.radio(
-                    "データソース",
-                    options,
-                    index=default_index,
-                    key=f"noise_source_{key}",
-                    label_visibility="collapsed"
-                )
-                
-                # 選択に基づいてデータを設定
-                if data_source == "拡張済みデータ":
-                    selected_data[key] = st.session_state.stretched_data[key]
-                    st.caption("📌 拡張済み")
-                else:
-                    selected_data[key] = base_data[key]
-                    st.caption("📌 元データ")
-                
-                # データ情報表示
-                if selected_data[key] is not None:
-                    df_info = selected_data[key]
-                    if '穿孔長' in df_info.columns:
-                        max_length = df_info['穿孔長'].max()
-                        st.caption(f"最大長: {max_length:.1f}m")
-                    st.caption(f"行数: {len(df_info):,}")
-    
-    st.divider()
-    
     remover = NoiseRemover()
     
     # 一括処理ボタンを上部に配置
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # 処理可能なデータがあるかチェック
-        processable_data = {k: v for k, v in selected_data.items() 
-                           if v is not None and not v.empty and '穿孔エネルギー' in v.columns}
-        
-        if processable_data:
-            if st.button("🔧 選択したデータをノイズ除去", type="primary", key="process_all_files", use_container_width=True):
-                with st.spinner("データを処理中..."):
-                    processed_count = 0
-                    processed_data_dict = {}
-                    
-                    # 選択されたデータで処理
-                    for key, df in processable_data.items():
+        if st.button("🔧 すべてのファイルを一括でノイズ除去", type="primary", key="process_all_files", use_container_width=True):
+            with st.spinner("すべてのファイルを処理中..."):
+                processed_count = 0
+                # LMRの順番で処理
+                for file_name in sort_files_lmr(st.session_state.raw_data.keys()):
+                    df = st.session_state.raw_data[file_name]
+                    if '穿孔エネルギー' in df.columns:
                         processed_df = remover.apply_lowess(
                             df,
                             target_column='穿孔エネルギー',
@@ -673,181 +595,172 @@ def display_noise_removal():
                             it=st.session_state.lowess_it,
                             delta=st.session_state.lowess_delta
                         )
-                        # キーをファイル名形式に変換して保存
-                        file_name = f"{key}_processed"
-                        processed_data_dict[file_name] = processed_df
                         st.session_state.processed_data[file_name] = processed_df
                         st.session_state[f'processed_{file_name}'] = processed_df
                         processed_count += 1
-                    
-                    st.success(f"✅ {processed_count}個のデータのノイズ除去が完了しました！")
-                    st.rerun()
-        else:
-            st.info("処理可能なデータがありません。データを選択してください。")
+                st.success(f"✅ {processed_count}個のファイルのノイズ除去が完了しました！")
+                st.rerun()
     
-    # 各データのグラフをLMRの順番で表示
-    for key in ['L', 'M', 'R']:
-        if key in selected_data and selected_data[key] is not None and not selected_data[key].empty:
-            df = selected_data[key]
+    # 各ファイルのグラフをLMRの順番で表示
+    for selected_file in sort_files_lmr(st.session_state.raw_data.keys()):
+        df = st.session_state.raw_data[selected_file]
+        
+        # ファイル名をセクションタイトルとして表示
+        st.divider()
+        st.markdown(f"### 📄 {selected_file}")
+        
+        # 必須カラムのチェック
+        if '穿孔エネルギー' not in df.columns:
+            st.warning(f"⚠️ '{selected_file}' に '穿孔エネルギー' 列が見つかりません")
+            st.info("データのカラム: " + ", ".join(df.columns))
+            continue
+        
+        # X軸のカラムを特定
+        x_col = '穿孔長' if '穿孔長' in df.columns else ('TD' if 'TD' in df.columns else None)
+        
+        # グラフ表示領域
+        # 処理結果がある場合は処理前・処理後を重ねて表示
+        if f'processed_{selected_file}' in st.session_state:
+            processed_df = st.session_state[f'processed_{selected_file}']
             
-            # セクションタイトルとして表示
-            st.divider()
-            
-            # データソース情報を含むタイトル
-            source_info = ""
-            if key in selected_data:
-                # 拡張済みデータかどうか判定
-                if has_stretched_data and key in st.session_state.stretched_data and \
-                   st.session_state.stretched_data[key] is not None and \
-                   df.equals(st.session_state.stretched_data[key]):
-                    source_info = " (拡張済みデータ)"
-                else:
-                    source_info = " (元データ)"
-            
-            st.markdown(f"### 📄 {key}側データ{source_info}")
-            
-            # 必須カラムのチェック
-            if '穿孔エネルギー' not in df.columns:
-                st.warning(f"⚠️ '{key}側' に '穿孔エネルギー' 列が見つかりません")
-                st.info("データのカラム: " + ", ".join(df.columns))
-                continue
-            
-            # X軸のカラムを特定
-            x_col = '穿孔長' if '穿孔長' in df.columns else ('TD' if 'TD' in df.columns else None)
-            
-            # 処理済みデータのキー
-            processed_key = f"{key}_processed"
-            
-            # グラフ表示領域
-            # 処理結果がある場合は処理前・処理後を重ねて表示
-            if f'processed_{processed_key}' in st.session_state:
-                processed_df = st.session_state[f'processed_{processed_key}']
+            if 'Lowess_Trend' in processed_df.columns:
+                # 処理前と処理後を重ねたグラフを作成
+                fig = go.Figure()
                 
-                if 'Lowess_Trend' in processed_df.columns:
-                    # 処理前と処理後を重ねたグラフを作成
-                    fig = go.Figure()
-                    
-                    if x_col:
-                        # X軸タイトルを設定
-                        x_axis_title = '穿孔長(m)' if x_col == '穿孔長' else x_col
-                        
-                        # 処理前データ（青いライン）
-                        fig.add_trace(go.Scatter(
-                            x=df[x_col],
-                            y=df['穿孔エネルギー'],
-                            mode='lines',
-                            name='処理前',
-                            line=dict(color='blue', width=2),
-                            opacity=0.7
-                        ))
-                        
-                        # 処理後データ（赤いライン、上に表示）
-                        fig.add_trace(go.Scatter(
-                            x=processed_df[x_col],
-                            y=processed_df['Lowess_Trend'],
-                            mode='lines',
-                            name='処理後',
-                            line=dict(color='red', width=2)
-                        ))
-                        
-                        # 共通のレイアウト設定を取得
-                        layout = get_graph_layout_settings()
-                        layout.update(dict(
-                            title=f"ノイズ除去結果（{key}側）{source_info} - 全{len(df)}行",
-                            xaxis_title=x_axis_title,
-                            yaxis_title='穿孔エネルギー',
-                            hovermode='x unified',
-                            height=600,
-                            showlegend=True,
-                            autosize=True,
-                            margin=dict(l=80, r=80, t=100, b=80)
-                        ))
-                        fig.update_layout(layout)
-                    else:
-                        # X軸がない場合はインデックスを使用
-                        fig.add_trace(go.Scatter(
-                            y=df['穿孔エネルギー'],
-                            mode='lines',
-                            name='処理前',
-                            line=dict(color='blue', width=2),
-                            opacity=0.7
-                        ))
-                        
-                        fig.add_trace(go.Scatter(
-                            y=processed_df['Lowess_Trend'],
-                            mode='lines',
-                            name='処理後',
-                            line=dict(color='red', width=2)
-                        ))
-                        
-                        # 共通のレイアウト設定を取得
-                        layout = get_graph_layout_settings()
-                        layout.update(dict(
-                            title=f"ノイズ除去結果（{key}側）{source_info} - 全{len(df)}行",
-                            xaxis_title='データポイント',
-                            yaxis_title='穿孔エネルギー',
-                            hovermode='x unified',
-                            height=600,
-                            showlegend=True,
-                            autosize=True,
-                            margin=dict(l=80, r=80, t=100, b=80)
-                        ))
-                        fig.update_layout(layout)
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-            else:
-                # 処理前データのみ表示
                 if x_col:
                     # X軸タイトルを設定
                     x_axis_title = '穿孔長(m)' if x_col == '穿孔長' else x_col
                     
-                    fig = px.line(
-                        df,
-                        x=x_col,
-                        y='穿孔エネルギー',
-                        title=f"データ（{key}側）{source_info} - 全{len(df)}行"
-                    )
-                    fig.update_traces(line=dict(color='blue', width=2))
-                    # 共通のレイアウト設定を取得して適用
+                    # 処理前データ（青いライン）
+                    fig.add_trace(go.Scatter(
+                        x=df[x_col],
+                        y=df['穿孔エネルギー'],
+                        mode='lines',
+                        name='処理前',
+                        line=dict(color='blue', width=2),
+                        opacity=0.7
+                    ))
+                    
+                    # 処理後データ（赤いライン、上に表示）
+                    fig.add_trace(go.Scatter(
+                        x=processed_df[x_col],
+                        y=processed_df['Lowess_Trend'],
+                        mode='lines',
+                        name='処理後',
+                        line=dict(color='red', width=2)
+                    ))
+                    
+                    # 共通のレイアウト設定を取得
                     layout = get_graph_layout_settings()
                     layout.update(dict(
+                        title=f"ノイズ除去結果（{selected_file}） - 全{len(df)}行",
                         xaxis_title=x_axis_title,
+                        yaxis_title='穿孔エネルギー',
+                        hovermode='x unified',
                         height=600,
+                        showlegend=True,
                         autosize=True,
                         margin=dict(l=80, r=80, t=100, b=80)
                     ))
                     fig.update_layout(layout)
                 else:
-                    fig = px.line(
+                    # X軸がない場合はインデックスを使用
+                    fig.add_trace(go.Scatter(
                         y=df['穿孔エネルギー'],
-                        title=f"データ（{key}側）{source_info} - 全{len(df)}行"
-                    )
-                    fig.update_traces(line=dict(color='blue', width=2))
-                    # 共通のレイアウト設定を取得して適用
+                        mode='lines',
+                        name='処理前',
+                        line=dict(color='blue', width=2),
+                        opacity=0.7
+                    ))
+                    
+                    fig.add_trace(go.Scatter(
+                        y=processed_df['Lowess_Trend'],
+                        mode='lines',
+                        name='処理後',
+                        line=dict(color='red', width=2)
+                    ))
+                    
+                    # 共通のレイアウト設定を取得
                     layout = get_graph_layout_settings()
                     layout.update(dict(
+                        title=f"ノイズ除去結果（{selected_file}） - 全{len(df)}行",
+                        xaxis_title='データポイント',
+                        yaxis_title='穿孔エネルギー',
+                        hovermode='x unified',
                         height=600,
+                        showlegend=True,
                         autosize=True,
                         margin=dict(l=80, r=80, t=100, b=80)
                     ))
                     fig.update_layout(layout)
                 
                 st.plotly_chart(fig, use_container_width=True)
+        else:
+            # 処理前データのみ表示
+            if x_col:
+                # X軸タイトルを設定
+                x_axis_title = '穿孔長(m)' if x_col == '穿孔長' else x_col
+                
+                fig = px.line(
+                    df,
+                    x=x_col,
+                    y='穿孔エネルギー',
+                    title=f"元データ（{selected_file}） - 全{len(df)}行"
+                )
+                fig.update_traces(line=dict(color='blue', width=2))
+                # 共通のレイアウト設定を取得して適用
+                layout = get_graph_layout_settings()
+                layout.update(dict(
+                    xaxis_title=x_axis_title,
+                    height=600,
+                    autosize=True,
+                    margin=dict(l=80, r=80, t=100, b=80)
+                ))
+                fig.update_layout(layout)
+            else:
+                fig = px.line(
+                    y=df['穿孔エネルギー'],
+                    title=f"元データ（{selected_file}） - 全{len(df)}行"
+                )
+                fig.update_traces(line=dict(color='blue', width=2))
+                # 共通のレイアウト設定を取得して適用
+                layout = get_graph_layout_settings()
+                layout.update(dict(
+                    height=600,
+                    autosize=True,
+                    margin=dict(l=80, r=80, t=100, b=80)
+                ))
+                fig.update_layout(layout)
+            
+            st.plotly_chart(fig, use_container_width=True)
     
     # ファイル保存セクション（処理済みデータがある場合）
     if st.session_state.get('processed_data'):
         st.divider()
         st.subheader("📥 処理結果のダウンロード")
         
+        # 結合ファイルを生成（複数ファイルの場合）
+        if len(st.session_state.processed_data) > 1:
+            with st.spinner("結合ファイルを生成中..."):
+                # process_multiple_filesメソッドを使用して結合
+                _, combined_data = remover.process_multiple_files(
+                    st.session_state.processed_data,
+                    frac=st.session_state.lowess_frac,
+                    it=st.session_state.lowess_it,
+                    delta=st.session_state.lowess_delta,
+                    use_parallel=False  # 既に処理済みなので並列化不要
+                )
+                st.session_state.combined_data = combined_data
+        
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("**個別ファイル**")
-            for name in st.session_state.processed_data.keys():
+            for name in sort_files_lmr(st.session_state.processed_data.keys()):
                 data = st.session_state.processed_data[name]
                 csv = data.to_csv(index=False, encoding='shift_jis')
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                file_name = f"{name}_ana_{timestamp}.csv"
+                file_name = f"{name.replace('.csv', '')}_ana_{timestamp}.csv"
                 
                 st.download_button(
                     label=f"⬇️ {file_name}",
@@ -855,6 +768,21 @@ def display_noise_removal():
                     file_name=file_name,
                     mime="text/csv",
                     key=f"download_batch_{name}"
+                )
+        
+        with col2:
+            if st.session_state.get('combined_data') is not None and not st.session_state.combined_data.empty:
+                st.write("**統合ファイル**")
+                csv = st.session_state.combined_data.to_csv(index=False, encoding='shift_jis')
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                combined_file_name = f"combined_data_{timestamp}.csv"
+                
+                st.download_button(
+                    label=f"⬇️ {combined_file_name}",
+                    data=csv.encode('shift_jis'),
+                    file_name=combined_file_name,
+                    mime="text/csv",
+                    key="download_combined"
                 )
 
 def display_data_processing():
@@ -1080,280 +1008,356 @@ def display_data_processing():
                 )
 
 def display_vtk_generation():
-    """VTK生成タブ（LMR座標計算統合版）"""
-    st.header("📦 VTKファイル生成（削孔検層データ）")
+    """VTKファイル生成と可視化"""
+    st.header("📦 VTKファイル生成と可視化")
     
-    # VTK converter初期化
-    if 'vtk_converter' not in st.session_state:
-        st.session_state.vtk_converter = VTKConverter()
+    # データ確認
+    if 'raw_data' not in st.session_state or not st.session_state.raw_data:
+        st.warning("⚠️ データを読み込んでください")
+        return
     
-    converter = st.session_state.vtk_converter
+    # DataProcessorを使用してLMR分類
+    processor = DataProcessor()
+    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
     
-    # 測点計算機の初期化
-    from src.survey_point_calculator import SurveyPointCalculator
-    survey_calc = SurveyPointCalculator()
+    # データソースの選択
+    data_source = st.radio(
+        "使用するデータ",
+        ["元のデータ", "拡張済みデータ（存在する場合）", "ノイズ除去済みデータ（存在する場合）"],
+        key="vtk_data_source"
+    )
     
-    # VTKライブラリの確認
-    try:
-        import vtk
-        vtk_available = True
-    except ImportError:
-        vtk_available = False
-        st.warning("⚠️ VTKライブラリがインストールされていません。VTKファイル生成機能が制限されます。")
-        st.info("インストール方法: `pip install vtk`")
+    # データソースの決定
+    if data_source == "拡張済みデータ（存在する場合）" and 'stretched_data' in st.session_state:
+        current_data = st.session_state.stretched_data
+        st.info("📌 拡張済みデータを使用しています")
+    elif data_source == "ノイズ除去済みデータ（存在する場合）" and st.session_state.get('processed_data'):
+        # ノイズ除去済みデータがある場合
+        current_data = {}
+        for name, df in st.session_state.processed_data.items():
+            # L, M, Rに対応するキーを抽出
+            if 'L_processed' in name:
+                current_data['L'] = df
+            elif 'M_processed' in name:
+                current_data['M'] = df
+            elif 'R_processed' in name:
+                current_data['R'] = df
+        if not current_data:
+            current_data = base_data
+            st.info("📌 ノイズ除去済みデータが見つからないため、元のデータを使用しています")
+        else:
+            st.info("📌 ノイズ除去済みデータを使用しています")
+    else:
+        current_data = base_data
+        if data_source != "元のデータ":
+            st.info("📌 指定されたデータが存在しないため、元のデータを使用しています")
     
-    # ファイル選択エリア
-    col1, col2 = st.columns([2, 1])
+    # VTK生成オプション
+    st.subheader("🔧 VTK生成設定")
+    
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.subheader("📄 ファイル選択")
-        
-        # 処理済みデータがある場合はそれを優先
-        if st.session_state.get('processed_data'):
-            st.info("✅ ノイズ除去済みデータを使用します")
-            available_files = sort_files_lmr(st.session_state.processed_data.keys())
-            data_source = st.session_state.processed_data
-        else:
-            st.info("ℹ️ 生データを使用します（ノイズ除去推奨）")
-            available_files = sort_files_lmr(st.session_state.raw_data.keys())
-            data_source = st.session_state.raw_data
-        
-        selected_files = st.multiselect(
-            "VTK化するファイルを選択",
-            available_files,
-            key="vtk_file_select_new",
-            help="L, M, Rのファイルを選択してください"
-        )
-        
-        # LMRタイプの自動検出結果表示
-        if selected_files:
-            detected_types = []
-            for file in selected_files:
-                lmr_type = converter.detect_lmr_type(file)
-                if lmr_type:
-                    detected_types.append(f"{file} → **{lmr_type}側**")
-                else:
-                    detected_types.append(f"{file} → ❌ タイプ検出失敗")
-            
-            with st.expander("🔍 LMRタイプ検出結果"):
-                for detection in detected_types:
-                    st.write(detection)
+        point_size = st.slider("ポイントサイズ", 1, 20, 5)
+        line_width = st.slider("ライン幅", 1, 10, 2)
     
     with col2:
-        st.subheader("⚙️ 座標設定")
-        
-        # 距離入力方法の選択
-        distance_input_method = st.radio(
-            "距離の入力方法",
-            ["直接入力", "測点から計算"],
-            help="坑口からの距離を入力する方法を選択"
+        color_mode = st.selectbox(
+            "カラーモード",
+            ["エネルギー値", "深度", "単色"],
+            index=0
         )
         
-        if distance_input_method == "直接入力":
-            # 坑口からの距離入力
-            distance_from_entrance = st.number_input(
-                "トンネル坑口からの距離 (m)",
-                min_value=0.0,
-                value=1000.0,
-                step=1.0,
-                help="測点のトンネル坑口からの距離を入力"
-            )
-        else:
-            # 測点から計算
-            st.write("**測点入力（例: 250+11）**")
-            survey_point_str = st.text_input(
-                "測点",
-                value="250+11",
-                help="測点を 主番号+小数部 の形式で入力"
-            )
-            
-            try:
-                c_value, e_value = survey_calc.parse_survey_point(survey_point_str)
-                distance_from_entrance = survey_calc.calculate_distance_from_entrance(c_value, e_value)
-                st.success(f"計算された距離: **{distance_from_entrance:.1f}m**")
-                
-                # 計算詳細
-                with st.expander("📊 計算詳細"):
-                    st.write(f"測点: {survey_calc.format_survey_point(c_value, e_value)}")
-                    st.write(f"測点数値: {c_value}×20 + {e_value} = {survey_calc.calculate_survey_point_value(c_value, e_value)}")
-                    st.write(f"基準測点: 255+4 (= {survey_calc.reference_value})")
-                    st.write(f"坑口からの距離: {survey_calc.reference_value} - {survey_calc.calculate_survey_point_value(c_value, e_value)} = {distance_from_entrance:.1f}m")
-            except ValueError as e:
-                st.error(f"測点の形式が不正です: {e}")
-                distance_from_entrance = 0.0
-        
-        # 固定値の表示
-        with st.expander("📐 使用される固定値", expanded=False):
-            st.write("**座標計算パラメータ:**")
-            st.write(f"- 基準距離: 967m")
-            st.write(f"- 方向角度: 65.588°")
-            st.write("**Z標高:**")
-            st.write("- L側: 17.3m")
-            st.write("- M側（天端）: 21.3m")
-            st.write("- R側: 17.3m")
-        
-        # サンプリング設定
-        sampling_interval = st.number_input(
-            "サンプリング間隔",
-            min_value=1,
-            max_value=100,
-            value=10,
-            help="データ点を間引く間隔（行数）"
+        color_map = st.selectbox(
+            "カラーマップ",
+            ["viridis", "plasma", "inferno", "magma", "cividis", "turbo", "rainbow"],
+            index=0
         )
     
-    st.divider()
+    with col3:
+        show_points = st.checkbox("ポイント表示", value=True)
+        show_lines = st.checkbox("ライン表示", value=True)
+        show_scalars = st.checkbox("スカラー値表示", value=True)
     
-    # 処理実行エリア
-    if selected_files and distance_from_entrance > 0:
-        col1, col2, col3 = st.columns([1, 2, 1])
+    # 可視化タブの追加
+    viz_tab1, viz_tab2, viz_tab3 = st.tabs(["📊 プレビュー", "💾 VTK生成", "🎨 高度な可視化"])
+    
+    with viz_tab1:
+        st.subheader("3Dプレビュー")
         
-        with col2:
-            if st.button("🚀 VTKファイル生成", type="primary", use_container_width=True):
-                with st.spinner("VTKファイルを生成中..."):
-                    success_files = []
-                    error_files = []
-                    generated_files = {}
+        # matplotlib による簡易プレビュー
+        if st.button("🔄 プレビューを生成", key="generate_preview"):
+            with st.spinner("プレビュー生成中..."):
+                try:
+                    from src.vtk_simple_renderer import VTKSimpleRenderer
+                    import matplotlib.pyplot as plt
+                    import tempfile
                     
-                    for file_name in selected_files:
-                        try:
-                            # LMRタイプの検出
-                            lmr_type = converter.detect_lmr_type(file_name)
-                            if not lmr_type:
-                                error_files.append((file_name, "L/M/Rタイプを検出できません"))
-                                continue
+                    # 一時的なVTKファイルを生成
+                    generator = VTKGenerator()
+                    converter = VTKConverter()
+                    
+                    # データの統合
+                    combined_df = pd.DataFrame()
+                    for key in ['L', 'M', 'R']:
+                        if key in current_data and current_data[key] is not None:
+                            df = current_data[key].copy()
+                            # プレフィックスを追加
+                            df['データ種別'] = key
+                            combined_df = pd.concat([combined_df, df], ignore_index=True)
+                    
+                    if not combined_df.empty:
+                        # VTKデータ作成
+                        with tempfile.NamedTemporaryFile(suffix='.vtk', delete=False) as tmp_file:
+                            vtk_path = tmp_file.name
                             
-                            # データの取得
-                            df = data_source[file_name]
+                            # 座標データの準備
+                            if 'X' in combined_df.columns and 'Y' in combined_df.columns and 'Z' in combined_df.columns:
+                                points = combined_df[['X', 'Y', 'Z']].values
+                            else:
+                                # 座標計算が必要な場合
+                                st.warning("座標データが不足しています。デフォルトの座標を使用します。")
+                                points = np.column_stack([
+                                    np.zeros(len(combined_df)),
+                                    np.zeros(len(combined_df)),
+                                    -combined_df['穿孔長'].values if '穿孔長' in combined_df.columns else np.arange(len(combined_df))
+                                ])
                             
-                            # CSVファイルを一時保存（VTKConverterが読み込むため）
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='shift-jis') as tmp:
-                                df.to_csv(tmp, index=False)
-                                temp_csv_path = tmp.name
+                            # エネルギー値の取得
+                            scalars = None
+                            if color_mode == "エネルギー値" and '穿孔エネルギー' in combined_df.columns:
+                                scalars = combined_df['穿孔エネルギー'].values
+                            elif color_mode == "深度" and '穿孔長' in combined_df.columns:
+                                scalars = combined_df['穿孔長'].values
                             
-                            # VTK変換実行
-                            output_vtk_name = converter.generate_vtk_filename(file_name)
-                            output_vtk_path = f"output/{output_vtk_name}"
-                            output_csv_path = f"output/{file_name.replace('.csv', '_3d.csv')}"
-                            
-                            # outputフォルダ作成
-                            Path("output").mkdir(exist_ok=True)
-                            
-                            # 変換実行
-                            vtk_path, csv_path = converter.convert_csv_to_vtk(
-                                csv_file=temp_csv_path,
-                                distance_from_entrance=distance_from_entrance,
-                                output_vtk_path=output_vtk_path,
-                                output_csv_path=output_csv_path,
-                                lmr_type=lmr_type
+                            # VTKファイル生成
+                            converter.create_vtk_polydata(
+                                points=points,
+                                scalars=scalars,
+                                scalar_name='Energy' if color_mode == "エネルギー値" else 'Depth',
+                                output_path=vtk_path
                             )
                             
-                            # 一時ファイル削除
-                            Path(temp_csv_path).unlink()
+                            # レンダリング
+                            renderer = VTKSimpleRenderer()
+                            if renderer.parse_vtk_file(vtk_path):
+                                fig = renderer.render_to_figure(
+                                    title="削孔軌跡 3D プレビュー",
+                                    colormap=color_map,
+                                    show_colorbar=show_scalars
+                                )
+                                st.pyplot(fig)
+                                
+                                # データサマリー表示
+                                summary = renderer.get_data_summary()
+                                with st.expander("📊 データサマリー"):
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.metric("ポイント数", summary['num_points'])
+                                        st.metric("ライン数", summary['num_lines'])
+                                    with col2:
+                                        if summary['bounds']:
+                                            st.write("**座標範囲:**")
+                                            st.write(f"X: {summary['bounds']['x_min']:.2f} ~ {summary['bounds']['x_max']:.2f}")
+                                            st.write(f"Y: {summary['bounds']['y_min']:.2f} ~ {summary['bounds']['y_max']:.2f}")
+                                            st.write(f"Z: {summary['bounds']['z_min']:.2f} ~ {summary['bounds']['z_max']:.2f}")
+                            else:
+                                st.error("VTKファイルの解析に失敗しました")
                             
-                            # 成功リストに追加
-                            success_files.append(file_name)
-                            generated_files[file_name] = {
-                                'vtk': vtk_path,
-                                'csv': csv_path,
-                                'lmr_type': lmr_type
-                            }
+                            # 一時ファイルを削除
+                            import os
+                            os.unlink(vtk_path)
                             
-                        except Exception as e:
-                            error_files.append((file_name, str(e)))
-                    
-                    # 結果表示
-                    if success_files:
-                        st.success(f"✅ {len(success_files)}個のVTKファイルを生成しました")
-                        st.session_state.generated_vtk_files = generated_files
+                    else:
+                        st.warning("表示するデータがありません")
                         
-                        # 生成ファイル情報
-                        with st.expander("📁 生成されたファイル"):
-                            for file_name, info in generated_files.items():
-                                st.write(f"**{file_name}**")
-                                st.write(f"- LMRタイプ: {info['lmr_type']}側")
-                                st.write(f"- VTK: {info['vtk']}")
-                                st.write(f"- CSV: {info['csv']}")
-                    
-                    if error_files:
-                        with st.expander("❌ エラーが発生したファイル"):
-                            for file_name, error in error_files:
-                                st.write(f"- {file_name}: {error}")
+                except Exception as e:
+                    st.error(f"プレビュー生成エラー: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
+    
+    with viz_tab2:
+        st.subheader("VTKファイル生成")
         
-        # ダウンロードセクション
-        if st.session_state.get('generated_vtk_files'):
-            st.divider()
-            st.subheader("📥 ダウンロード")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write("**VTKファイル**")
-                for file_name, info in st.session_state.generated_vtk_files.items():
-                    vtk_path = info['vtk']
-                    if Path(vtk_path).exists():
-                        with open(vtk_path, 'rb') as f:
-                            vtk_content = f.read()
+        # VTK生成
+        if st.button("🎯 VTKファイル生成", type="primary", key="generate_vtk"):
+            with st.spinner("VTKファイル生成中..."):
+                try:
+                    generator = VTKGenerator()
+                    converter = VTKConverter()
+                    
+                    generated_files = []
+                    
+                    # 各データ（L/M/R）ごとにVTKファイル生成
+                    for key in ['L', 'M', 'R']:
+                        if key in current_data and current_data[key] is not None:
+                            df = current_data[key]
+                            
+                            # 座標データの準備
+                            if 'X' in df.columns and 'Y' in df.columns and 'Z' in df.columns:
+                                points = df[['X', 'Y', 'Z']].values
+                            else:
+                                # デフォルト座標
+                                points = np.column_stack([
+                                    np.zeros(len(df)),
+                                    np.zeros(len(df)),
+                                    -df['穿孔長'].values if '穿孔長' in df.columns else np.arange(len(df))
+                                ])
+                            
+                            # スカラーデータ
+                            scalars = None
+                            scalar_name = 'Value'
+                            
+                            if color_mode == "エネルギー値":
+                                if 'Lowess_Trend' in df.columns:
+                                    scalars = df['Lowess_Trend'].values
+                                    scalar_name = 'Energy_Smoothed'
+                                elif '穿孔エネルギー' in df.columns:
+                                    scalars = df['穿孔エネルギー'].values
+                                    scalar_name = 'Energy'
+                            elif color_mode == "深度" and '穿孔長' in df.columns:
+                                scalars = df['穿孔長'].values
+                                scalar_name = 'Depth'
+                            
+                            # VTKファイル生成
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            vtk_filename = f"trajectory_{key}_{timestamp}.vtk"
+                            
+                            vtk_content = converter.create_vtk_polydata(
+                                points=points,
+                                scalars=scalars,
+                                scalar_name=scalar_name,
+                                output_path=None  # メモリ上で生成
+                            )
+                            
+                            if vtk_content:
+                                generated_files.append((vtk_filename, vtk_content, key))
+                    
+                    # ダウンロードセクション
+                    if generated_files:
+                        st.success(f"✅ {len(generated_files)}個のVTKファイルを生成しました")
                         
-                        st.download_button(
-                            label=f"⬇️ {Path(vtk_path).name}",
-                            data=vtk_content,
-                            file_name=Path(vtk_path).name,
-                            mime="application/vtk",
-                            key=f"download_vtk_{file_name}"
-                        )
-            
-            with col2:
-                st.write("**3D座標CSV**")
-                for file_name, info in st.session_state.generated_vtk_files.items():
-                    csv_path = info['csv']
-                    if Path(csv_path).exists():
-                        with open(csv_path, 'r', encoding='shift-jis') as f:
-                            csv_content = f.read()
+                        st.subheader("📥 ダウンロード")
                         
-                        st.download_button(
-                            label=f"⬇️ {Path(csv_path).name}",
-                            data=csv_content.encode('shift-jis'),
-                            file_name=Path(csv_path).name,
-                            mime="text/csv",
-                            key=f"download_csv_{file_name}"
-                        )
+                        for filename, content, key in generated_files:
+                            col1, col2 = st.columns([3, 1])
+                            with col1:
+                                st.download_button(
+                                    label=f"⬇️ {filename}",
+                                    data=content,
+                                    file_name=filename,
+                                    mime="application/octet-stream",
+                                    key=f"download_vtk_{key}_{timestamp}"
+                                )
+                            with col2:
+                                st.write(f"{key}側データ")
+                        
+                        # 統合VTKファイルも生成
+                        if len(generated_files) > 1:
+                            st.divider()
+                            if st.button("🔗 統合VTKファイル生成", key="generate_combined_vtk"):
+                                # すべてのデータを統合
+                                combined_df = pd.DataFrame()
+                                for key in ['L', 'M', 'R']:
+                                    if key in current_data and current_data[key] is not None:
+                                        df = current_data[key].copy()
+                                        df['データ種別'] = key
+                                        combined_df = pd.concat([combined_df, df], ignore_index=True)
+                                
+                                # 統合VTK生成
+                                if 'X' in combined_df.columns and 'Y' in combined_df.columns and 'Z' in combined_df.columns:
+                                    points = combined_df[['X', 'Y', 'Z']].values
+                                else:
+                                    points = np.column_stack([
+                                        np.zeros(len(combined_df)),
+                                        np.zeros(len(combined_df)),
+                                        -combined_df['穿孔長'].values if '穿孔長' in combined_df.columns else np.arange(len(combined_df))
+                                    ])
+                                
+                                scalars = None
+                                if color_mode == "エネルギー値" and '穿孔エネルギー' in combined_df.columns:
+                                    scalars = combined_df['穿孔エネルギー'].values
+                                elif color_mode == "深度" and '穿孔長' in combined_df.columns:
+                                    scalars = combined_df['穿孔長'].values
+                                
+                                combined_vtk = converter.create_vtk_polydata(
+                                    points=points,
+                                    scalars=scalars,
+                                    scalar_name='Combined_Data',
+                                    output_path=None
+                                )
+                                
+                                combined_filename = f"trajectory_combined_{timestamp}.vtk"
+                                st.download_button(
+                                    label=f"⬇️ {combined_filename} (統合データ)",
+                                    data=combined_vtk,
+                                    file_name=combined_filename,
+                                    mime="application/octet-stream",
+                                    key=f"download_vtk_combined_{timestamp}"
+                                )
+                    else:
+                        st.warning("生成可能なデータがありません")
+                        
+                except Exception as e:
+                    st.error(f"エラー: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
+    
+    with viz_tab3:
+        st.subheader("🎨 高度な可視化オプション")
         
-        # 3Dプレビュー（座標のみ）
-        if st.checkbox("📊 3D座標プレビュー"):
-            if st.session_state.get('generated_vtk_files'):
-                fig = go.Figure()
+        st.info("ParaViewやVTKを使用した高度な可視化機能")
+        
+        # レンダラー選択
+        renderer_type = st.selectbox(
+            "レンダラータイプ",
+            ["Simple (matplotlib)", "VTK (要インストール)", "ParaView (要インストール)"],
+            index=0,
+            help="WSL環境では'Simple'を推奨"
+        )
+        
+        if renderer_type == "VTK (要インストール)":
+            st.warning("""
+            ⚠️ VTKレンダラーの使用には以下が必要です：
+            - VTKライブラリのインストール (`pip install vtk`)
+            - X11サーバー（WSLの場合）
+            - OpenGL対応
+            """)
+            
+            if st.button("VTKレンダラーでプレビュー", key="vtk_preview"):
+                st.info("VTKレンダラーは環境依存のため、エラーが発生する可能性があります")
                 
-                for file_name, info in st.session_state.generated_vtk_files.items():
-                    csv_path = info['csv']
-                    if Path(csv_path).exists():
-                        # CSVから座標を読み込む
-                        preview_df = pd.read_csv(csv_path, encoding='shift-jis', skiprows=1)
-                        if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', 'Z:標高(m)']):
-                            fig.add_trace(go.Scatter3d(
-                                x=preview_df['X(m)'],
-                                y=preview_df['Y(m)'],
-                                z=preview_df['Z:標高(m)'],
-                                mode='lines+markers',
-                                name=f"{info['lmr_type']}側",
-                                marker=dict(size=2),
-                                line=dict(width=3)
-                            ))
-                
-                fig.update_layout(
-                    scene=dict(
-                        xaxis_title='X (m)',
-                        yaxis_title='Y (m)',
-                        zaxis_title='Z:標高 (m)',
-                        aspectmode='data'
-                    ),
-                    height=600,
-                    title=f"削孔検層3D軌跡（坑口から{distance_from_entrance}m）"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-    elif selected_files and distance_from_entrance <= 0:
-        st.warning("⚠️ 有効な距離を入力してください")
-    else:
-        st.info("👆 VTK化するファイルを選択してください")
+        elif renderer_type == "ParaView (要インストール)":
+            st.warning("""
+            ⚠️ ParaViewレンダラーの使用には以下が必要です：
+            - ParaViewのインストール
+            - pvpythonへのパス設定
+            """)
+            
+            paraview_path = st.text_input(
+                "ParaViewインストールパス",
+                placeholder="/usr/local/bin/paraview",
+                help="ParaViewのインストールディレクトリを指定"
+            )
+            
+            if st.button("ParaViewでレンダリング", key="paraview_preview"):
+                if paraview_path:
+                    st.info("ParaViewレンダリング機能は実装準備中です")
+                else:
+                    st.error("ParaViewのパスを指定してください")
+        
+        # エクスポートオプション
+        st.divider()
+        st.subheader("📤 エクスポートオプション")
+        
+        export_format = st.selectbox(
+            "エクスポート形式",
+            ["VTK", "PLY", "STL", "OBJ"],
+            index=0
+        )
+        
+        if export_format != "VTK":
+            st.info(f"{export_format}形式へのエクスポート機能は実装準備中です")
+
 if __name__ == "__main__":
     main()
