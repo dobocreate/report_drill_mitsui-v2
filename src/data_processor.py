@@ -15,7 +15,7 @@ class DataProcessor:
     def __init__(self):
         self.default_interval = 0.02  # デフォルトの間引き間隔（m）
 
-    def categorize_lmr_data(self, raw_data_dict):
+    def categorize_lmr_data(self, raw_data_dict, return_filenames=False):
         """
         生データをL/M/R別に分類
         
@@ -23,13 +23,17 @@ class DataProcessor:
         -----------
         raw_data_dict : dict
             ファイル名をキーとするDataFrameの辞書
+        return_filenames : bool
+            Trueの場合、元のファイル名も返す
         
         Returns:
         --------
-        dict
-            'L', 'M', 'R'をキーとするDataFrameの辞書
+        dict or tuple
+            return_filenames=Falseの場合: 'L', 'M', 'R'をキーとするDataFrameの辞書
+            return_filenames=Trueの場合: (DataFrameの辞書, ファイル名マッピング辞書)
         """
         categorized_data = {'L': None, 'M': None, 'R': None}
+        filename_mapping = {'L': None, 'M': None, 'R': None}
         
         for filename, df in raw_data_dict.items():
             if df is None or df.empty:
@@ -39,11 +43,16 @@ class DataProcessor:
             filename_upper = filename.upper()
             if '_L_' in filename_upper or filename_upper.endswith('_L.CSV'):
                 categorized_data['L'] = df
+                filename_mapping['L'] = filename
             elif '_M_' in filename_upper or filename_upper.endswith('_M.CSV'):
                 categorized_data['M'] = df
+                filename_mapping['M'] = filename
             elif '_R_' in filename_upper or filename_upper.endswith('_R.CSV'):
                 categorized_data['R'] = df
+                filename_mapping['R'] = filename
         
+        if return_filenames:
+            return categorized_data, filename_mapping
         return categorized_data
     
     def resample_data(

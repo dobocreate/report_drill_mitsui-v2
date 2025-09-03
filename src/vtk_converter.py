@@ -456,7 +456,8 @@ class VTKConverter:
                     1 <= int(month) <= 12 and 1 <= int(day) <= 31):
                     # YY.MM.DD形式に変換
                     date_str = f"{year[-2:]}.{month.zfill(2)}.{day.zfill(2)}"
-            except:
+            except Exception:
                 pass
         
-        return f"Drill-{lmr_type}_ana_{date_str}.vtk"
+        result = f"Drill-{lmr_type}_ana_{date_str}.vtk"
+        return result

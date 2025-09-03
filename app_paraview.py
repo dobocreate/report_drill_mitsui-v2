@@ -373,7 +373,10 @@ def display_data_stretching():
     
     # DataProcessorを使用してLMR分類
     processor = DataProcessor()
-    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
+    base_data, filename_mapping = processor.categorize_lmr_data(st.session_state.raw_data, return_filenames=True)
+    
+    # ファイル名マッピングをセッションステートに保存
+    st.session_state.lmr_filename_mapping = filename_mapping
     
     # データストレッチャーのインポート
     from src.data_stretcher import DataStretcher
@@ -584,7 +587,10 @@ def display_noise_removal():
     
     # DataProcessorを使用してLMR分類
     processor = DataProcessor()
-    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
+    base_data, filename_mapping = processor.categorize_lmr_data(st.session_state.raw_data, return_filenames=True)
+    
+    # ファイル名マッピングをセッションステートに保存
+    st.session_state.lmr_filename_mapping = filename_mapping
     
     # 拡張済みデータの存在確認
     has_stretched_data = 'stretched_data' in st.session_state
@@ -674,8 +680,15 @@ def display_noise_removal():
                             it=st.session_state.lowess_it,
                             delta=st.session_state.lowess_delta
                         )
-                        # キーをファイル名形式に変換して保存
-                        file_name = f"{key}_processed"
+                        # 元のファイル名を使用（存在する場合）
+                        if 'lmr_filename_mapping' in st.session_state and key in st.session_state.lmr_filename_mapping:
+                            original_filename = st.session_state.lmr_filename_mapping[key]
+                            # 処理済みファイル名として保存（元のファイル名を保持）
+                            file_name = original_filename.replace('.csv', '_processed.csv') if original_filename.endswith('.csv') else f"{original_filename}_processed"
+                        else:
+                            # マッピングがない場合は従来の方式
+                            file_name = f"{key}_processed"
+                        
                         processed_data_dict[file_name] = processed_df
                         st.session_state.processed_data[file_name] = processed_df
                         st.session_state[f'processed_{file_name}'] = processed_df
