@@ -19,6 +19,7 @@ from src.noise_remover import NoiseRemover
 from src.vtk_generator import VTKGenerator
 from src.plotly_visualizer import PlotlyVisualizer
 from src.data_processor import DataProcessor
+from src.data_extractor import DataExtractor
 from src.vtk_converter import VTKConverter
 
 # ページ設定
@@ -235,8 +236,8 @@ def display_welcome():
 
 def display_main_content():
     """メインコンテンツ表示"""
-    # タブ作成（データ拡張タブを追加）
-    tab_names = ["📊 データ概要", "📏 データ拡張", "🔧 ノイズ除去"]
+    # タブ作成（データ抽出タブを追加）
+    tab_names = ["📊 データ概要", "✂️ データ抽出", "📏 データ拡張", "🔧 ノイズ除去"]
     
     if st.session_state.get('processed_data'):
         tab_names.append("✂️ データ加工")
@@ -247,23 +248,26 @@ def display_main_content():
     tab_names.append("📦 VTK生成")
     
     tabs = st.tabs(tab_names)
-    tab1, tab2, tab3 = tabs[0], tabs[1], tabs[2]
-    tab4 = tabs[3] if len(tabs) > 3 else None
+    tab1, tab2, tab3, tab4 = tabs[0], tabs[1], tabs[2], tabs[3]
     tab5 = tabs[4] if len(tabs) > 4 else None
+    tab6 = tabs[5] if len(tabs) > 5 else None
     
     with tab1:
         display_data_overview()
     
     with tab2:
-        display_data_stretching()
+        display_data_extraction()  # 新しい関数
     
     with tab3:
-        display_noise_removal()
+        display_data_stretching()
     
     with tab4:
-        display_data_processing()
+        display_noise_removal()
     
     with tab5:
+        display_data_processing()
+    
+    with tab6:
         display_vtk_generation()
 
 def display_data_overview():
@@ -361,6 +365,358 @@ def sort_files_lmr(file_list):
     
     return sorted(file_list, key=lambda x: (get_lmr_order(x), x))
 
+def display_data_extraction():
+    """データ抽出・部分分析タブ"""
+    st.header("✂️ データ抽出・部分分析")
+    
+    if not st.session_state.raw_data:
+        st.info("データを読み込んでください")
+        return
+    
+    # データ選択
+    selected_file = st.selectbox(
+        "抽出対象ファイルを選択",
+        sort_files_lmr(st.session_state.raw_data.keys()),
+        key="extraction_file_select"
+    )
+    
+    if not selected_file:
+        return
+    
+    df = st.session_state.raw_data[selected_file]
+    extractor = DataExtractor()
+    
+    # 深度カラムの確認
+    depth_col = None
+    for col in ['穿孔長', 'TD', 'x:TD(m)', '深度', 'Depth']:
+        if col in df.columns:
+            depth_col = col
+            break
+    
+    if not depth_col:
+        st.warning("深度データが見つかりません")
+        return
+    
+    # エネルギーカラムの確認（グラフ表示用）
+    energy_col = None
+    for col in ['穿孔エネルギー', 'エネルギー', 'Energy', 'Ene-M']:
+        if col in df.columns:
+            energy_col = col
+            break
+    
+    st.subheader("🎯 穿孔長（深度）範囲による抽出")
+    
+    # セッション状態の初期化（ファイルごとに保持）
+    session_key_min = f'depth_range_min_{selected_file}'
+    session_key_max = f'depth_range_max_{selected_file}'
+    
+    if session_key_min not in st.session_state:
+        st.session_state[session_key_min] = float(df[depth_col].min())
+    if session_key_max not in st.session_state:
+        st.session_state[session_key_max] = float(df[depth_col].max())
+    
+    # 現在の範囲を取得
+    current_min = st.session_state[session_key_min]
+    current_max = st.session_state[session_key_max]
+    
+    # 範囲選択UI
+    st.write("**📊 グラフで範囲を確認**")
+    
+    # スライダーによる範囲選択
+    st.write("**🎚️ スライダーで範囲を選択**")
+    depth_min_val = float(df[depth_col].min())
+    depth_max_val = float(df[depth_col].max())
+    
+    depth_range = st.slider(
+        "深度範囲を選択 (m)",
+        min_value=depth_min_val,
+        max_value=depth_max_val,
+        value=(current_min, current_max),
+        step=0.1,
+        key=f"depth_range_slider_{selected_file}"
+    )
+    
+    # スライダーの値でセッション状態を更新
+    if depth_range[0] != current_min or depth_range[1] != current_max:
+        st.session_state[session_key_min] = depth_range[0]
+        st.session_state[session_key_max] = depth_range[1]
+        current_min = depth_range[0]
+        current_max = depth_range[1]
+    
+    if energy_col:
+        # Plotlyでインタラクティブグラフを作成（穿孔長をX軸、穿孔エネルギーをY軸）
+        fig = go.Figure()
+        
+        # メインデータをプロット
+        fig.add_trace(go.Scatter(
+            x=df[depth_col],
+            y=df[energy_col],
+            mode='lines',
+            name='全データ',
+            line=dict(color='lightgray', width=1)
+        ))
+        
+        # 選択範囲のデータをハイライト
+        mask = (df[depth_col] >= current_min) & \
+               (df[depth_col] <= current_max)
+        selected_data = df[mask]
+        
+        if not selected_data.empty:
+            fig.add_trace(go.Scatter(
+                x=selected_data[depth_col],
+                y=selected_data[energy_col],
+                mode='lines',
+                name='選択範囲',
+                line=dict(color='red', width=2)
+            ))
+        
+        # 範囲を示す垂直線（X軸上の穿孔長範囲）
+        fig.add_vline(x=current_min, 
+                     line_dash="dash", line_color="blue", 
+                     annotation_text=f"開始: {current_min:.2f}m")
+        fig.add_vline(x=current_max, 
+                     line_dash="dash", line_color="blue",
+                     annotation_text=f"終了: {current_max:.2f}m")
+        
+        # 選択範囲を薄い青で塗りつぶし
+        fig.add_vrect(
+            x0=current_min,
+            x1=current_max,
+            fillcolor="lightblue",
+            opacity=0.2,
+            layer="below",
+            line_width=0
+        )
+        
+        # レイアウト設定（標準的なグラフレイアウトを使用）
+        layout = get_graph_layout_settings()
+        layout.update(dict(
+            title=f"{selected_file} - 範囲選択",
+            xaxis_title=f"{depth_col} (m)",
+            yaxis_title=energy_col,
+            height=600,
+            hovermode='x unified',
+            showlegend=True
+        ))
+        # X軸の範囲を深度データの全範囲に設定（少し余裕を持たせる）
+        depth_min = df[depth_col].min()
+        depth_max = df[depth_col].max()
+        depth_margin = (depth_max - depth_min) * 0.02  # 2%の余白
+        layout['xaxis']['range'] = [depth_min - depth_margin, depth_max + depth_margin]
+        # Y軸の範囲を自動調整
+        layout['yaxis'].pop('range', None)
+        
+        fig.update_layout(layout)
+        
+        # グラフ表示
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        # エネルギーデータがない場合
+        st.warning("穿孔エネルギーデータが見つかりません。グラフを表示できません。")
+    
+    # 数値入力による範囲指定
+    st.write("**🔢 数値で範囲を指定**")
+    col1, col2 = st.columns(2)
+    with col1:
+        depth_min = st.number_input(
+            "開始深度 (m)",
+            value=current_min,
+            min_value=float(df[depth_col].min()),
+            max_value=float(df[depth_col].max()),
+            step=0.1,
+            key=f"depth_start_input_{selected_file}"
+        )
+    with col2:
+        depth_max = st.number_input(
+            "終了深度 (m)",
+            value=current_max,
+            min_value=float(df[depth_col].min()),
+            max_value=float(df[depth_col].max()),
+            step=0.1,
+            key=f"depth_end_input_{selected_file}"
+        )
+    
+    # 数値入力が変更された場合、セッション状態を更新
+    if depth_min != current_min or depth_max != current_max:
+        st.session_state[session_key_min] = depth_min
+        st.session_state[session_key_max] = depth_max
+        st.rerun()
+    
+    # 抽出実行ボタン
+    if st.button("🔍 選択範囲でデータを抽出", key="extract_by_depth", type="primary"):
+        extracted_df = extractor.extract_by_depth_range(
+            df, current_min, current_max, depth_col
+        )
+        # セッション状態に一時的に保存
+        st.session_state[f'temp_extracted_{selected_file}'] = extracted_df
+    
+    # 抽出結果の表示（セッション状態から取得）
+    extracted_df = st.session_state.get(f'temp_extracted_{selected_file}')
+    if extracted_df is not None:
+        st.success(f"✅ データを抽出しました")
+        
+        # サマリー情報の表示
+        summary = extractor.get_extraction_summary(extracted_df)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("元データ行数", summary.get('original_rows', 0))
+        with col2:
+            st.metric("抽出データ行数", summary.get('extracted_rows', 0))
+        with col3:
+            extraction_rate = (summary.get('extracted_rows', 0) / 
+                             summary.get('original_rows', 1) * 100)
+            st.metric("抽出率", f"{extraction_rate:.1f}%")
+        
+        # 深度範囲の情報
+        if 'depth_range' in summary:
+            st.write("**深度範囲:**")
+            depth_info = summary['depth_range']
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("最小深度", f"{depth_info['min']:.2f} m")
+            with col2:
+                st.metric("最大深度", f"{depth_info['max']:.2f} m")
+            with col3:
+                st.metric("平均深度", f"{depth_info['mean']:.2f} m")
+        
+        # エネルギー統計
+        if 'energy_stats' in summary:
+            st.write("**エネルギー統計:**")
+            energy_info = summary['energy_stats']
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("最小", f"{energy_info['min']:.2f}")
+            with col2:
+                st.metric("最大", f"{energy_info['max']:.2f}")
+            with col3:
+                st.metric("平均", f"{energy_info['mean']:.2f}")
+            with col4:
+                st.metric("標準偏差", f"{energy_info['std']:.2f}")
+        
+        # データ表示
+        with st.expander("📋 抽出データを表示", expanded=True):
+            st.dataframe(extracted_df)
+        
+        # データ保存
+        st.write("**💾 抽出データの保存**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # セッションステートに保存
+            default_name = f"{selected_file.replace('.csv', '')}_extracted"
+            save_name = st.text_input(
+                "保存名",
+                value=default_name,
+                key="save_extracted_name",
+                help="抽出データとして保存されます。'_extracted'を含む名前にしてください。"
+            )
+            
+            if st.button("セッションに保存", key="save_to_session"):
+                # _extractedが含まれていない場合は追加
+                if '_extracted' not in save_name.lower():
+                    save_name = f"{save_name}_extracted"
+                
+                st.session_state.raw_data[save_name] = extracted_df.copy()
+                st.success(f"✅ '{save_name}'として保存しました")
+                
+                # 保存されたデータの情報を表示
+                st.info(f"保存されたデータ: {len(extracted_df)}行, 範囲: {extracted_df[depth_col].min():.1f}m - {extracted_df[depth_col].max():.1f}m")
+                
+                # 一時データをクリア
+                if f'temp_extracted_{selected_file}' in st.session_state:
+                    del st.session_state[f'temp_extracted_{selected_file}']
+                
+                st.rerun()
+        
+        with col2:
+            # CSVダウンロード
+            csv = extracted_df.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="CSVダウンロード",
+                data=csv,
+                file_name=f"{selected_file}_extracted.csv",
+                mime="text/csv",
+                key="download_extracted"
+            )
+        
+        # グラフ表示
+        st.write("**📊 データ可視化**")
+        
+        # 深度カラムとエネルギーカラムの検出
+        depth_col = None
+        energy_col = None
+        
+        for col in ['穿孔長', 'TD', 'x:TD(m)', '深度', 'Depth']:
+            if col in extracted_df.columns:
+                depth_col = col
+                break
+        
+        for col in ['穿孔エネルギー', 'エネルギー', 'Energy', 'Ene-M']:
+            if col in extracted_df.columns:
+                energy_col = col
+                break
+        
+        if depth_col and energy_col:
+            # Plotlyで比較グラフを作成（X軸：穿孔長、Y軸：穿孔エネルギー）
+            fig = go.Figure()
+            
+            # 元データ（薄いグレー）
+            fig.add_trace(go.Scatter(
+                x=df[depth_col],
+                y=df[energy_col],
+                mode='lines',
+                name='元データ',
+                line=dict(color='lightgray', width=1),
+                opacity=0.5
+            ))
+            
+            # 抽出データ（赤）
+            fig.add_trace(go.Scatter(
+                x=extracted_df[depth_col],
+                y=extracted_df[energy_col],
+                mode='lines',
+                name='抽出データ',
+                line=dict(color='red', width=2)
+            ))
+            
+            # 抽出範囲を示す垂直線と塗りつぶし
+            fig.add_vline(x=current_min, 
+                         line_dash="dash", line_color="blue", opacity=0.5)
+            fig.add_vline(x=current_max, 
+                         line_dash="dash", line_color="blue", opacity=0.5)
+            
+            fig.add_vrect(
+                x0=current_min,
+                x1=current_max,
+                fillcolor="lightblue",
+                opacity=0.1,
+                layer="below",
+                line_width=0
+            )
+            
+            # レイアウト設定（標準的なグラフレイアウトを使用）
+            layout = get_graph_layout_settings()
+            layout.update(dict(
+                title=f"抽出結果の比較 - {selected_file}",
+                xaxis_title=f"{depth_col} (m)",
+                yaxis_title=energy_col,
+                height=500,
+                hovermode='x unified',
+                showlegend=True
+            ))
+            # X軸の範囲を深度データの全範囲に設定（少し余裕を持たせる）
+            depth_min = df[depth_col].min()
+            depth_max = df[depth_col].max()
+            depth_margin = (depth_max - depth_min) * 0.02  # 2%の余白
+            layout['xaxis']['range'] = [depth_min - depth_margin, depth_max + depth_margin]
+            # Y軸の範囲を自動調整
+            layout['yaxis'].pop('range', None)
+            
+            fig.update_layout(layout)
+            st.plotly_chart(fig, use_container_width=True)
+    
+
 def display_data_stretching():
     """データ拡張（スケーリング）処理"""
     st.header("📏 データ拡張（スケーリング）")
@@ -370,32 +726,151 @@ def display_data_stretching():
         st.warning("⚠️ データを読み込んでください")
         return
     
+    # デバッグ: 利用可能なデータキーを表示
+    with st.expander("🔍 利用可能なデータ（デバッグ）", expanded=False):
+        st.write("**セッション内のデータキー:**")
+        for key in st.session_state.raw_data.keys():
+            st.write(f"- {key}")
+            if '_extracted' in key.lower():
+                st.write(f"  → **抽出データとして検出**")
+    
     # DataProcessorを使用してLMR分類
     processor = DataProcessor()
-    base_data, filename_mapping = processor.categorize_lmr_data(st.session_state.raw_data, return_filenames=True)
-    
-    # ファイル名マッピングをセッションステートに保存
-    st.session_state.lmr_filename_mapping = filename_mapping
     
     # データストレッチャーのインポート
     from src.data_stretcher import DataStretcher
     stretcher = DataStretcher()
     
-    # 使用するデータの選択
-    data_source = st.radio(
-        "使用するデータ",
-        ["元のデータ", "拡張済みデータ（存在する場合）"],
-        key="stretch_data_source"
-    )
+    # 元データをLMR分類
+    base_data = processor.categorize_lmr_data(st.session_state.raw_data)
     
-    # データソースの決定
-    if data_source == "拡張済みデータ（存在する場合）" and 'stretched_data' in st.session_state:
-        current_data = st.session_state.stretched_data
-        st.info("📌 拡張済みデータを使用しています")
-    else:
-        current_data = base_data
-        if data_source == "拡張済みデータ（存在する場合）":
-            st.info("📌 拡張済みデータが存在しないため、元のデータを使用しています")
+    # 抽出データがあるか確認（_extractedを含むキーを探す）
+    extracted_data_keys = [key for key in st.session_state.raw_data.keys() if '_extracted' in key.lower()]
+    
+    # 拡張済みデータがあるか確認
+    has_stretched_data = 'stretched_data' in st.session_state
+    
+    # L/M/Rごとにデータソースを選択
+    st.subheader("📊 データソースの選択")
+    st.write("各データタイプごとに使用するデータソースを選択してください：")
+    
+    # 選択されたデータを格納する辞書
+    current_data = {}
+    selected_sources_info = {}  # 選択情報を保存
+    
+    # L/M/Rそれぞれの選択UI
+    cols = st.columns(3)
+    
+    for idx, key in enumerate(['L', 'M', 'R']):
+        with cols[idx]:
+            st.write(f"**{key}側データ**")
+            
+            # そのデータタイプが存在するかチェック
+            has_base = key in base_data and base_data[key] is not None and not base_data[key].empty
+            has_stretched = has_stretched_data and key in st.session_state.stretched_data and \
+                           st.session_state.stretched_data[key] is not None and \
+                           not st.session_state.stretched_data[key].empty
+            
+            # 抽出データで該当するLMRタイプを探す
+            available_extracted = []
+            for ext_key in extracted_data_keys:
+                # 抽出データをLMR分類
+                temp_dict = {ext_key: st.session_state.raw_data[ext_key]}
+                temp_categorized = processor.categorize_lmr_data(temp_dict)
+                if key in temp_categorized and temp_categorized[key] is not None and not temp_categorized[key].empty:
+                    available_extracted.append(ext_key)
+            
+            if not has_base and not has_stretched and not available_extracted:
+                st.warning(f"データなし")
+                current_data[key] = None
+            else:
+                # 選択オプションを動的に作成
+                options = []
+                if has_base:
+                    options.append("元のデータ")
+                if available_extracted:
+                    for ext_key in available_extracted:
+                        options.append(f"抽出: {ext_key}")
+                if has_stretched:
+                    options.append("拡張済みデータ")
+                
+                # デフォルト値は拡張済みがあれば拡張済み、なければ元のデータ
+                if has_stretched:
+                    default_option = "拡張済みデータ"
+                elif has_base:
+                    default_option = "元のデータ"
+                else:
+                    default_option = options[0] if options else None
+                
+                # データソース選択
+                if options:
+                    data_source = st.selectbox(
+                        "データソース",
+                        options,
+                        index=options.index(default_option) if default_option in options else 0,
+                        key=f"stretch_source_{key}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    # 選択に基づいてデータを設定
+                    if data_source == "拡張済みデータ":
+                        current_data[key] = st.session_state.stretched_data[key]
+                        st.caption("📌 拡張済み")
+                        selected_sources_info[key] = "拡張済み"
+                    elif data_source == "元のデータ":
+                        current_data[key] = base_data[key]
+                        st.caption("📌 元データ")
+                        selected_sources_info[key] = "元データ"
+                    elif data_source.startswith("抽出:"):
+                        # 抽出データの場合
+                        ext_key = data_source.replace("抽出: ", "")
+                        extracted_df = st.session_state.raw_data[ext_key].copy()
+                        
+                        # 深度カラムを特定
+                        depth_col = None
+                        for col in ['穿孔長', 'TD', 'x:TD(m)', '深度', 'Depth']:
+                            if col in extracted_df.columns:
+                                depth_col = col
+                                break
+                        
+                        # 抽出データの元の範囲を保存
+                        original_min = None
+                        original_max = None
+                        if depth_col:
+                            original_min = extracted_df[depth_col].min()
+                            original_max = extracted_df[depth_col].max()
+                            
+                            # 穿孔長を0基準に調整（最小値を0にシフト）
+                            extracted_df[depth_col] = extracted_df[depth_col] - original_min
+                            
+                            st.caption(f"📌 抽出: {original_min:.1f}-{original_max:.1f}m")
+                            st.caption(f"   → 0-{extracted_df[depth_col].max():.1f}m")
+                        else:
+                            st.caption(f"📌 抽出データ")
+                        
+                        # 調整後のデータをLMR分類
+                        temp_dict = {ext_key: extracted_df}
+                        temp_categorized = processor.categorize_lmr_data(temp_dict)
+                        current_data[key] = temp_categorized[key] if key in temp_categorized else None
+                        selected_sources_info[key] = f"抽出({ext_key})"
+                    
+                    # データ情報表示
+                    if current_data[key] is not None:
+                        df_info = current_data[key]
+                        if '穿孔長' in df_info.columns:
+                            max_length = df_info['穿孔長'].max()
+                            st.caption(f"最大長: {max_length:.1f}m")
+                        st.caption(f"行数: {len(df_info):,}")
+    
+    st.divider()
+    
+    # 選択情報のサマリーを表示
+    if selected_sources_info:
+        st.write("⚡ **選択されたデータソース:**")
+        source_summary = []
+        for key, source in selected_sources_info.items():
+            source_summary.append(f"{key}側: {source}")
+        st.info(" | ".join(source_summary))
     
     # 現在のデータ情報を表示
     st.subheader("現在のデータ情報")
@@ -512,7 +987,8 @@ def display_data_stretching():
                     st.session_state.stretched_data = merged_data
                 else:
                     # 元データをコピーして、処理したデータのみ更新
-                    st.session_state.stretched_data = base_data.copy()
+                    # current_dataを基にして初期化
+                    st.session_state.stretched_data = current_data.copy()
                     st.session_state.stretched_data.update(stretched_data)
                 
                 st.session_state.stretch_applied = True
@@ -1057,14 +1533,14 @@ def display_data_processing():
                     # 深度カラムを特定
                     depth_col = processor._find_depth_column(df)
                     
-                    # 必要なカラムのみ抽出
+                    # 必要なカラムのみ抽出（順序：穿孔長、穿孔エネルギー、Lowess_Trend）
                     required_cols = []
                     if depth_col:
                         required_cols.append(depth_col)
-                    if 'Lowess_Trend' in df.columns:
-                        required_cols.append('Lowess_Trend')
                     if '穿孔エネルギー' in df.columns:
                         required_cols.append('穿孔エネルギー')
+                    if 'Lowess_Trend' in df.columns:
+                        required_cols.append('Lowess_Trend')
                     
                     if required_cols:
                         extracted_data = df[required_cols].copy()

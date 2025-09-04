@@ -21,3 +21,4 @@ data/
 *.csv
 .serena/
 .code-workspace
+backup/
