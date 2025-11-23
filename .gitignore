@@ -21,7 +21,7 @@ data/
 *.csv
 .serena/
 *.code-workspace
-architecture_proposal.md
+docs/
 backup/
 !data/2025_11_17_12_33_57_L.csv
 !data/2025_11_17_12_33_57_M.csv
