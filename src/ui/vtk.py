@@ -297,17 +297,39 @@ def display_vtk_generation():
         for file_name, info in generated_files.items():
             csv_path = info['csv']
             if Path(csv_path).exists():
-                # CSVから座標を読み込む
+                # CSVから座標とエネルギー値を読み込む
                 preview_df = pd.read_csv(csv_path, encoding='shift-jis', skiprows=1)
-                if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', 'Z:標高(m)']):
+                if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', 'Z:標高(m)', '穿孔エネルギー']):
+                    # エネルギー値を取得
+                    energy_values = preview_df['穿孔エネルギー']
+                    
                     fig.add_trace(go.Scatter3d(
                         x=preview_df['X(m)'],
                         y=preview_df['Y(m)'],
                         z=preview_df['Z:標高(m)'],
                         mode='lines+markers',
                         name=f"{info['lmr_type']}側",
-                        marker=dict(size=2),
-                        line=dict(width=3)
+                        marker=dict(
+                            size=4,
+                            color=energy_values,  # エネルギー値で色分け
+                            colorscale='Jet',  # 青→緑→黄→赤のカラーマップ
+                            showscale=True,  # カラーバーを表示
+                            colorbar=dict(
+                                title="穿孔エネルギー",
+                                thickness=15,
+                                len=0.7,
+                                x=1.02
+                            ),
+                            cmin=energy_values.min(),
+                            cmax=energy_values.max()
+                        ),
+                        line=dict(
+                            width=2,
+                            color=energy_values,  # ラインもエネルギー値で色分け
+                            colorscale='Jet'
+                        ),
+                        text=[f"エネルギー: {e:.1f}" for e in energy_values],
+                        hovertemplate='X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>%{text}<extra></extra>'
                     ))
         
         fig.update_layout(
@@ -318,7 +340,7 @@ def display_vtk_generation():
                 aspectmode='data'
             ),
             height=600,
-            title=f"削孔検層3D軌跡（坑口から{distance_from_entrance}m）"
+            title=f"削孔検層3D軌跡（坑口から{distance_from_entrance}m）- エネルギー値による色分け"
         )
         st.plotly_chart(fig, use_container_width=True)
 
