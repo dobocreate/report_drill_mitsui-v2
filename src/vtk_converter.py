@@ -7,7 +7,7 @@ import csv
 import os
 import math
 import datetime
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 import pandas as pd
 
 # ヘッドレス環境対応
@@ -101,7 +101,10 @@ class VTKConverter:
     def get_coordinates_for_lmr(
         self, 
         lmr_type: str, 
-        distance_from_entrance: float
+        distance_from_entrance: float,
+        reference_distance: Optional[float] = None,
+        direction_angle: Optional[float] = None,
+        z_elevations: Optional[dict] = None
     ) -> Tuple[float, float, float, float]:
         """
         LMRタイプと坑口からの距離から座標を取得
@@ -109,12 +112,19 @@ class VTKConverter:
         Args:
             lmr_type: 'L', 'M', 'R'のいずれか
             distance_from_entrance: トンネル坑口からの距離（m）
+            reference_distance: 基準距離（省略時はデフォルト）
+            direction_angle: 方向角度（省略時はデフォルト）
+            z_elevations: Z標高の辞書（省略時はデフォルト）
             
         Returns:
             (x_base, y_base, angle, z_elevation)のタプル
         """
         # 座標計算
-        coords = self.calculator.calculate_coordinates(distance_from_entrance)
+        coords = self.calculator.calculate_coordinates(
+            distance_from_entrance,
+            direction_angle=direction_angle,
+            reference_distance=reference_distance
+        )
         
         # LMRタイプに応じた座標を取得
         if lmr_type == 'L':
@@ -129,15 +139,20 @@ class VTKConverter:
         else:
             raise ValueError(f"不正なLMRタイプ: {lmr_type}")
         
-        angle = self.calculator.DIRECTION_ANGLE
-        z_elevation = self.Z_ELEVATIONS[lmr_type]
+        # 角度（指定がなければ計算結果またはデフォルトを使用）
+        angle = direction_angle if direction_angle is not None else self.calculator.DIRECTION_ANGLE
+        
+        # Z標高（指定がなければデフォルトを使用）
+        elevations = z_elevations if z_elevations is not None else self.Z_ELEVATIONS
+        z_elevation = elevations.get(lmr_type, 17.3)
         
         return x_base, y_base, angle, z_elevation
     
     def read_csv_data(
         self, 
         csv_file: str, 
-        encoding: str = 'shift-jis'
+        encoding: str = 'shift-jis',
+        sampling_interval: int = 1
     ) -> Tuple[List[float], List[float]]:
         """
         CSVファイルから穿孔長とエネルギー値を読み込む
@@ -145,6 +160,7 @@ class VTKConverter:
         Args:
             csv_file: CSVファイルパス
             encoding: ファイルエンコーディング
+            sampling_interval: サンプリング間隔（行数）
             
         Returns:
             (穿孔長リスト, エネルギー値リスト)のタプル
@@ -159,30 +175,60 @@ class VTKConverter:
             # 必要な列のインデックスを取得
             try:
                 length_index = header.index('穿孔長')
-                energy_index = header.index('Lowess_Trend')
-            except ValueError as e:
+            except ValueError:
                 # 別名での列を探す
                 length_index = None
-                energy_index = None
-                
                 for i, col in enumerate(header):
                     if '穿孔長' in col or 'TD' in col:
                         length_index = i
+                        break
+                if length_index is None:
+                    raise ValueError(f"穿孔長の列が見つかりません。ヘッダー: {header}")
+            
+            # エネルギー列の検索（優先順位: Lowess_Trend > 穿孔エネルギー）
+            energy_index = None
+            try:
+                energy_index = header.index('Lowess_Trend')
+            except ValueError:
+                # Lowess_Trendがない場合は穿孔エネルギーを探す
+                for i, col in enumerate(header):
                     if 'Lowess_Trend' in col or 'Lowess' in col:
                         energy_index = i
-                        
-                if length_index is None or energy_index is None:
-                    raise ValueError(f"必要な列が見つかりません: {e}")
+                        break
+                
+                if energy_index is None:
+                    # 穿孔エネルギーを探す
+                    for i, col in enumerate(header):
+                        if '穿孔エネルギー' in col or 'Energy' in col:
+                            energy_index = i
+                            break
+                
+                if energy_index is None:
+                    raise ValueError(f"エネルギー列（Lowess_TrendまたはEnergy）が見つかりません。ヘッダー: {header}")
             
-            # データを読み込む
+            # データを読み込む（修正版：有効なデータ行のみをカウント）
+            valid_row_count = 0  # 有効なデータ行のカウント
             for row in reader:
                 try:
                     length = float(row[length_index])
                     energy = float(row[energy_index])
-                    drilling_lengths.append(length)
-                    energy_values.append(energy)
+                    
+                    # 有効なデータの場合のみサンプリング判定
+                    if valid_row_count % sampling_interval == 0:
+                        drilling_lengths.append(length)
+                        energy_values.append(energy)
+                    
+                    valid_row_count += 1
                 except (ValueError, IndexError):
-                    continue  # 無効な行はスキップ
+                    # 無効な行はカウントせずスキップ
+                    pass
+        
+        # データ点数の確認
+        if len(drilling_lengths) < 2:
+            raise ValueError(
+                f"データ点が不足しています（取得: {len(drilling_lengths)}点、必要: 最低2点）。"
+                f"有効データ行数: {valid_row_count}、サンプリング間隔: {sampling_interval}"
+            )
                     
         return drilling_lengths, energy_values
     
@@ -361,7 +407,11 @@ class VTKConverter:
         distance_from_entrance: float,
         output_vtk_path: Optional[str] = None,
         output_csv_path: Optional[str] = None,
-        lmr_type: Optional[str] = None
+        lmr_type: Optional[str] = None,
+        reference_distance: Optional[float] = None,
+        direction_angle: Optional[float] = None,
+        z_elevations: Optional[dict] = None,
+        sampling_interval: int = 1
     ) -> Tuple[str, str]:
         """
         CSVファイルをVTK形式に変換
@@ -372,6 +422,10 @@ class VTKConverter:
             output_vtk_path: 出力VTKファイルパス（省略時は自動生成）
             output_csv_path: 出力CSVファイルパス（省略時は自動生成）
             lmr_type: LMRタイプ（省略時はファイル名から自動検出）
+            reference_distance: 基準距離（省略時はデフォルト）
+            direction_angle: 方向角度（省略時はデフォルト）
+            z_elevations: Z標高の辞書（省略時はデフォルト）
+            sampling_interval: サンプリング間隔（行数）
             
         Returns:
             (VTKファイルパス, CSVファイルパス)のタプル
@@ -383,11 +437,18 @@ class VTKConverter:
                 raise ValueError("ファイル名からL/M/Rタイプを検出できませんでした")
         
         # CSVデータの読み込み
-        drilling_lengths, energy_values = self.read_csv_data(csv_file)
+        drilling_lengths, energy_values = self.read_csv_data(
+            csv_file, 
+            sampling_interval=sampling_interval
+        )
         
         # 座標の取得
         x_base, y_base, angle, z_elevation = self.get_coordinates_for_lmr(
-            lmr_type, distance_from_entrance
+            lmr_type, 
+            distance_from_entrance,
+            reference_distance=reference_distance,
+            direction_angle=direction_angle,
+            z_elevations=z_elevations
         )
         
         # 3D座標の計算

@@ -1,0 +1,224 @@
+﻿"""
+蜑雁ｭ疲､懷ｱ､繝・・繧ｿ邨ｱ蜷亥・譫舌い繝励Μ繧ｱ繝ｼ繧ｷ繝ｧ繝ｳ
+Streamlit + Plotly 縺ｫ繧医ｋ蟇ｾ隧ｱ逧・庄隕門喧縺ｨVTK逕滓・
+"""
+
+import streamlit as st
+import pandas as pd
+from pathlib import Path
+from src.data_loader import DataLoader
+from src.state import AppState
+from src.ui.overview import display_data_overview
+from src.ui.extraction import display_data_extraction
+from src.ui.stretching import display_data_stretching
+from src.ui.noise import display_noise_removal
+from src.ui.processing import display_data_processing
+from src.ui.vtk import display_vtk_generation
+
+# 繝壹・繧ｸ險ｭ螳・st.set_page_config(
+    page_title="蜑雁ｭ疲､懷ｱ､繝・・繧ｿ邨ｱ蜷亥・譫舌す繧ｹ繝・Β",
+    page_icon="笵擾ｸ・,
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# 繧ｫ繧ｹ繧ｿ繝CSS
+st.markdown("""
+<style>
+    .main {
+        padding: 0rem 1rem;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 4px 4px 0px 0px;
+        padding: 10px 20px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #ffffff;
+        border-bottom: 2px solid #ff4b4b;
+    }
+    .stMetric {
+        background-color: #f8f9fa;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .stMetric label {
+        font-size: 0.875rem;
+    }
+    .stMetric [data-testid="stMetricValue"] {
+        font-size: 1.25rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+def load_data(uploaded_files, use_sample, header_row=1):
+    """繝・・繧ｿ隱ｭ縺ｿ霎ｼ縺ｿ蜃ｦ逅・""
+    loader = DataLoader()
+    
+    if use_sample:
+        # 繧ｵ繝ｳ繝励Ν繝・・繧ｿ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ (L, M, R)
+        sample_files = [
+            "data/2025_11_17_12_33_57_L.csv",
+            "data/2025_11_17_12_33_57_M.csv",
+            "data/2025_11_17_12_33_57_R.csv"
+        ]
+        
+        data_dict = {}
+        for file_path in sample_files:
+            path = Path(file_path)
+            if path.exists():
+                try:
+                    df = loader.load_single_file(path, header_row=header_row)
+                    data_dict[path.name] = df
+                except Exception as e:
+                    st.error(f"繧ｵ繝ｳ繝励Ν繝輔ぃ繧､繝ｫ {path.name} 縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨・ {str(e)}")
+            else:
+                st.warning(f"繧ｵ繝ｳ繝励Ν繝輔ぃ繧､繝ｫ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ: {file_path}")
+        
+        return data_dict
+    
+    if uploaded_files:
+        try:
+            # 隍・焚繝輔ぃ繧､繝ｫ繧剃ｸ諡ｬ隱ｭ縺ｿ霎ｼ縺ｿ
+            data_dict = {}
+            for uploaded_file in uploaded_files:
+                df = loader.load_from_stream(uploaded_file, header_row=header_row)
+                data_dict[uploaded_file.name] = df
+            return data_dict
+        except Exception as e:
+            st.error(f"繝・・繧ｿ隱ｭ縺ｿ霎ｼ縺ｿ繧ｨ繝ｩ繝ｼ: {str(e)}")
+            return {}
+            
+    return {}
+
+def display_welcome():
+    """繧ｦ繧ｧ繝ｫ繧ｫ繝逕ｻ髱｢陦ｨ遉ｺ"""
+    st.markdown("""
+    ## 窓 繧医≧縺薙◎・・    
+    **蜑雁ｭ疲､懷ｱ､繝・・繧ｿ邨ｱ蜷亥・譫舌す繧ｹ繝・Β**縺ｸ繧医≧縺薙◎縲・    縺薙・繧｢繝励Μ繧ｱ繝ｼ繧ｷ繝ｧ繝ｳ縺ｧ縺ｯ縲√ヨ繝ｳ繝阪Ν蟾･莠九↓縺翫￠繧句炎蟄疲､懷ｱ､繝・・繧ｿ縺ｮ蜿ｯ隕門喧縲∝・譫舌∝刈蟾･縲√◎縺励※3D繝｢繝・Ν蛹厄ｼ・TK・峨ｒ荳蜈・噪縺ｫ陦後≧縺薙→縺後〒縺阪∪縺吶・    
+    ### 噫 蟋九ａ繧九↓縺ｯ
+    
+    蟾ｦ蛛ｴ縺ｮ繧ｵ繧､繝峨ヰ繝ｼ縺九ｉ **縲靴SV繝輔ぃ繧､繝ｫ繧偵い繝・・繝ｭ繝ｼ繝峨・* 縺ｾ縺溘・繧ｵ繝ｳ繝励Ν繝・・繧ｿ繧剃ｽｿ逕ｨ縺励※縺上□縺輔＞縲・    
+    ### 笨ｨ 荳ｻ縺ｪ讖溯・
+    
+    1. **投 繝・・繧ｿ讎りｦ・*: 繝・・繧ｿ縺ｮ蝓ｺ譛ｬ諠・ｱ縺ｨ繧ｨ繝阪Ν繧ｮ繝ｼ蛻・ｸ・ｒ遒ｺ隱・    2. **笨ゑｸ・繝・・繧ｿ謚ｽ蜃ｺ**: 豺ｱ蠎ｦ遽・峇縺ｫ繧医ｋ繝・・繧ｿ縺ｮ蛻・ｊ蜃ｺ縺・    3. **棟 繝・・繧ｿ諡｡蠑ｵ**: 繝・・繧ｿ縺ｮ髟ｷ縺輔ｒ陬懈ｭ｣・医せ繧ｱ繝ｼ繝ｪ繝ｳ繧ｰ・・    4. **肌 繝弱う繧ｺ髯､蜴ｻ**: Lowess繝輔ぅ繝ｫ繧ｿ縺ｫ繧医ｋ繧ｹ繝繝ｼ繧ｸ繝ｳ繧ｰ蜃ｦ逅・    5. **悼 繝・・繧ｿ蜉蟾･**: 繝・・繧ｿ縺ｮ髢灘ｼ輔″縺ｨ陬憺俣
+    6. **逃 VTK逕滓・**: 3D蜿ｯ隕門喧逕ｨ縺ｮVTK繝輔ぃ繧､繝ｫ逕滓・
+    """)
+    
+    st.info("争 繧ｵ繧､繝峨ヰ繝ｼ縺九ｉ繝・・繧ｿ繧偵い繝・・繝ｭ繝ｼ繝峨＠縺ｦ髢句ｧ九＠縺ｦ縺上□縺輔＞")
+
+def display_main_content():
+    """繝｡繧､繝ｳ繧ｳ繝ｳ繝・Φ繝・｡ｨ遉ｺ"""
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "投 繝・・繧ｿ讎りｦ・,
+        "笨ゑｸ・繝・・繧ｿ謚ｽ蜃ｺ",
+        "棟 繝・・繧ｿ諡｡蠑ｵ",
+        "肌 繝弱う繧ｺ髯､蜴ｻ",
+        "悼 繝・・繧ｿ蜉蟾･",
+        "逃 VTK逕滓・"
+    ])
+    
+    with tab1:
+        display_data_overview()
+        
+    with tab2:
+        display_data_extraction()
+        
+    with tab3:
+        display_data_stretching()
+        
+    with tab4:
+        display_noise_removal()
+        
+    with tab5:
+        display_data_processing()
+        
+    with tab6:
+        display_vtk_generation()
+
+def main():
+    """繝｡繧､繝ｳ繧｢繝励Μ繧ｱ繝ｼ繧ｷ繝ｧ繝ｳ"""
+    # 繧ｻ繝・す繝ｧ繝ｳ迥ｶ諷九・蛻晄悄蛹・    AppState.initialize()
+    
+    st.title("笵擾ｸ・蜑雁ｭ疲､懷ｱ､繝・・繧ｿ邨ｱ蜷亥・譫舌す繧ｹ繝・Β")
+    st.caption("Drilling Logging Data Integrated Analysis System")
+    
+    # 繧ｵ繧､繝峨ヰ繝ｼ險ｭ螳・    with st.sidebar:
+        st.header("唐 繝・・繧ｿ蜈･蜉・)
+        
+        # 繝輔ぃ繧､繝ｫ繧｢繝・・繝ｭ繝ｼ繝・        uploaded_files = st.file_uploader(
+            "CSV繝輔ぃ繧､繝ｫ繧偵い繝・・繝ｭ繝ｼ繝・,
+            type=['csv'],
+            accept_multiple_files=True,
+            help="Shift-JIS縺ｾ縺溘・UTF-8蠖｢蠑上・CSV繝輔ぃ繧､繝ｫ"
+        )
+        
+        # 繧ｵ繝ｳ繝励Ν繝・・繧ｿ菴ｿ逕ｨ繧ｪ繝励す繝ｧ繝ｳ
+        use_sample = st.checkbox("繧ｵ繝ｳ繝励Ν繝・・繧ｿ繧剃ｽｿ逕ｨ", value=False)
+        
+        st.divider()
+        
+        # 隱ｭ縺ｿ霎ｼ縺ｿ險ｭ螳・        with st.expander("笞呻ｸ・隱ｭ縺ｿ霎ｼ縺ｿ險ｭ螳・, expanded=False):
+            header_row = st.selectbox(
+                "繝倥ャ繝繝ｼ陦・,
+                options=[0, 1, 2, 3],
+                index=1,  # 繝・ヵ繧ｩ繝ｫ繝医・2陦檎岼・医う繝ｳ繝・ャ繧ｯ繧ｹ1・・                format_func=lambda x: f"{x+1}陦檎岼",
+                help="繧ｫ繝ｩ繝蜷阪′險倩ｼ峨＆繧後※縺・ｋ陦後ｒ謖・ｮ壹＠縺ｾ縺・
+            )
+            # AppState縺ｫ菫晏ｭ・            st.session_state[AppState.KEY_HEADER_ROW] = header_row
+        
+        # 繝・・繧ｿ隱ｭ縺ｿ霎ｼ縺ｿ螳溯｡・        if uploaded_files or use_sample:
+            if st.button("繝・・繧ｿ繧定ｪｭ縺ｿ霎ｼ繧", type="primary", use_container_width=True):
+                with st.spinner("繝・・繧ｿ繧定ｪｭ縺ｿ霎ｼ繧薙〒縺・∪縺・.."):
+                    raw_data = load_data(uploaded_files, use_sample, header_row)
+                    
+                    if raw_data:
+                        AppState.set_raw_data(raw_data)
+                        st.success(f"笨・{len(raw_data)}蛟九・繝輔ぃ繧､繝ｫ繧定ｪｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆")
+                        st.rerun()
+                    else:
+                        st.error("繝・・繧ｿ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆")
+        
+        st.divider()
+        
+        # 蜈ｱ騾夊ｨｭ螳・        if AppState.is_data_loaded():
+            st.header("屏・・蜈ｱ騾夊ｨｭ螳・)
+            
+            # 菫晏ｭ倥ヵ繧ｩ繝ｫ繝險ｭ螳・            save_folder = st.text_input(
+                "菫晏ｭ倥ヵ繧ｩ繝ｫ繝",
+                value="output",
+                help="逕滓・縺輔ｌ縺溘ヵ繧｡繧､繝ｫ縺ｮ菫晏ｭ伜・繝輔か繝ｫ繝"
+            )
+            st.session_state[AppState.KEY_SAVE_FOLDER] = save_folder
+            
+            # 繝弱う繧ｺ髯､蜴ｻ繝代Λ繝｡繝ｼ繧ｿ・医し繧､繝峨ヰ繝ｼ縺ｧ蜈ｱ騾夊ｨｭ螳夲ｼ・            st.subheader("繝弱う繧ｺ髯､蜴ｻ繝代Λ繝｡繝ｼ繧ｿ")
+            st.session_state.lowess_frac = st.slider(
+                "蟷ｳ貊大喧菫よ焚 (frac)", 
+                0.01, 0.5, 0.05, 0.01,
+                help="蛟､縺悟､ｧ縺阪＞縺ｻ縺ｩ貊代ｉ縺九↓縺ｪ繧翫∪縺・
+            )
+            st.session_state.lowess_it = st.slider(
+                "蜿榊ｾｩ蝗樊焚 (it)", 
+                1, 10, 3, 1,
+                help="螟悶ｌ蛟､縺ｮ蠖ｱ髻ｿ繧帝勁蜴ｻ縺吶ｋ蝗樊焚"
+            )
+            st.session_state.lowess_delta = st.number_input(
+                "Delta (鬮倬溷喧)", 
+                0.0, 10.0, 0.0, 0.1,
+                help="0繧医ｊ螟ｧ縺阪＞蛟､繧定ｨｭ螳壹☆繧九→險育ｮ励′鬮倬溷喧縺輔ｌ縺ｾ縺・
+            )
+
+    # 繝｡繧､繝ｳ繧ｳ繝ｳ繝・Φ繝・・陦ｨ遉ｺ蛻・ｊ譖ｿ縺・    if AppState.is_data_loaded():
+        display_main_content()
+    else:
+        display_welcome()
+
+if __name__ == "__main__":
+    main()

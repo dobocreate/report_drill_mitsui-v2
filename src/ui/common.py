@@ -3,6 +3,7 @@
 """
 import streamlit as st
 import plotly.graph_objects as go
+from src.ui.styles import COLORS
 
 def get_graph_layout_settings():
     """共通のグラフレイアウト設定を返す"""
@@ -11,27 +12,29 @@ def get_graph_layout_settings():
             range=[0, 45],  # X軸の範囲を0-45mに固定
             showgrid=True,
             gridwidth=1,
-            gridcolor='LightGray',
+            gridcolor=COLORS['border'],
             showline=True,
-            linewidth=1,  # 枠線を細く
-            linecolor='LightGray',  # 枠線の色を補助線と同じに
+            linewidth=1,
+            linecolor=COLORS['border'],
             mirror=True,
-            tickfont=dict(size=14),  # X軸の数値フォントサイズを大きく
-            title=dict(font=dict(size=16))  # X軸タイトルのフォントサイズ
+            tickfont=dict(size=12, color=COLORS['text']),
+            title=dict(font=dict(size=14, color=COLORS['text']))
         ),
         yaxis=dict(
             range=[0, 1000],  # Y軸の範囲を0-1000に設定
             showgrid=True,
             gridwidth=1,
-            gridcolor='LightGray',
+            gridcolor=COLORS['border'],
             showline=True,
-            linewidth=1,  # 枠線を細く
-            linecolor='LightGray',  # 枠線の色を補助線と同じに
+            linewidth=1,
+            linecolor=COLORS['border'],
             mirror=True,
-            tickfont=dict(size=14),  # Y軸の数値フォントサイズを大きく
-            title=dict(font=dict(size=16))  # Y軸タイトルのフォントサイズ
+            tickfont=dict(size=12, color=COLORS['text']),
+            title=dict(font=dict(size=14, color=COLORS['text']))
         ),
-        plot_bgcolor='white',
-        font=dict(size=14),  # 全体のフォントサイズ
-        title_font=dict(size=18)  # タイトルのフォントサイズ
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12, color=COLORS['text']),
+        title_font=dict(size=16, color=COLORS['text']),
+        margin=dict(l=50, r=20, t=40, b=40)
     )

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional
 from scipy import interpolate
+import re
 
 
 class DataProcessor:
@@ -39,15 +40,29 @@ class DataProcessor:
             if df is None or df.empty:
                 continue
                 
-            # ファイル名からL/M/Rを判定
+            # ファイル名からL/M/Rを判定 (正規表現を使用)
+            # パターン: 
+            # 1. '_L_' が含まれる (e.g. data_L_01.csv)
+            # 2. '_L' で終わる (拡張子の前) (e.g. data_L.csv)
+            # 3. 'L_' で始まる (e.g. L_data.csv)
+            # 4. 'L' そのもの (e.g. L.csv) - ただし他の文字と混ざらないように注意
+            
             filename_upper = filename.upper()
-            if '_L_' in filename_upper or filename_upper.endswith('_L.CSV'):
+            
+            # 拡張子を除去して判定
+            base_name = filename_upper
+            if '.' in base_name:
+                base_name = base_name.rsplit('.', 1)[0]
+            
+            # 正規表現で判定
+            # (^|_)L(_|$) -> 行頭またはアンダースコア + L + アンダースコアまたは行末
+            if re.search(r'(^|_)L(_|$)', base_name):
                 categorized_data['L'] = df
                 filename_mapping['L'] = filename
-            elif '_M_' in filename_upper or filename_upper.endswith('_M.CSV'):
+            elif re.search(r'(^|_)M(_|$)', base_name):
                 categorized_data['M'] = df
                 filename_mapping['M'] = filename
-            elif '_R_' in filename_upper or filename_upper.endswith('_R.CSV'):
+            elif re.search(r'(^|_)R(_|$)', base_name):
                 categorized_data['R'] = df
                 filename_mapping['R'] = filename
         
