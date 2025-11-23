@@ -20,5 +20,9 @@ output/
 data/
 *.csv
 .serena/
-.code-workspace
+*.code-workspace
+architecture_proposal.md
 backup/
+!data/2025_11_17_12_33_57_L.csv
+!data/2025_11_17_12_33_57_M.csv
+!data/2025_11_17_12_33_57_R.csv
