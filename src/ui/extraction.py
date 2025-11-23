@@ -97,8 +97,11 @@ def display_data_extraction():
             st.session_state[session_key_min] = depth_min
             st.session_state[session_key_max] = depth_max
         
+        # ボタンの上にスペースを追加
+        st.write("")
+        
         # 抽出実行ボタン
-        if st.button("🔍 選択範囲でデータを抽出", key="extract_by_depth", type="primary", use_container_width=True):
+        if st.button("🔍 データ抽出", key="extract_by_depth", type="primary", use_container_width=True):
             extracted_df = extractor.extract_by_depth_range(
                 df, current_min, current_max, depth_col
             )
