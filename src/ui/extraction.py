@@ -97,6 +97,17 @@ def display_data_extraction():
             st.session_state[session_key_min] = depth_min
             st.session_state[session_key_max] = depth_max
         
+        # ボタンの上にスペースを追加
+        st.write("")
+        
+        # 抽出実行ボタン
+        if st.button("🔍 データ抽出", key="extract_by_depth", type="primary", use_container_width=True):
+            extracted_df = extractor.extract_by_depth_range(
+                df, current_min, current_max, depth_col
+            )
+            # セッション状態に一時的に保存
+            st.session_state[f'temp_extracted_{selected_file}'] = extracted_df
+        
         # 範囲情報の表示
         st.divider()
         st.write("**📏 選択範囲情報**")
@@ -185,16 +196,6 @@ def display_data_extraction():
         else:
             # エネルギーデータがない場合
             st.warning("穿孔エネルギーデータが見つかりません。グラフを表示できません。")
-    
-    
-    
-    # 抽出実行ボタン
-    if st.button("🔍 選択範囲でデータを抽出", key="extract_by_depth", type="primary"):
-        extracted_df = extractor.extract_by_depth_range(
-            df, current_min, current_max, depth_col
-        )
-        # セッション状態に一時的に保存
-        st.session_state[f'temp_extracted_{selected_file}'] = extracted_df
     
     # 抽出結果の表示（セッション状態から取得）
     extracted_df = st.session_state.get(f'temp_extracted_{selected_file}')
