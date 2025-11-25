@@ -53,7 +53,7 @@ survey_point:
 # データ出典情報
 # ========================================
 data_source:
-  excel_file: "江川トンネル進行表.xlsx"
+  excel_file: "トンネル進行表.xlsx"
   reference_row: 974  # 基準座標の行番号
   reference_sheet: "Sheet1"  # シート名
   last_updated: "2024-08-31"

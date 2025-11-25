@@ -168,6 +168,8 @@ def display_data_processing():
     
     # 処理結果の表示
     resampled_data = AppState.get_resampled_data()
+    original_data_source = AppState.get_raw_data()
+    
     if resampled_data:
         st.subheader("📊 サンプリング結果")
         
@@ -201,30 +203,43 @@ def display_data_processing():
 
                 with col_graph:
                     # グラフ表示（処理前後の比較）
-                    if depth_col and 'Lowess_Trend' in df.columns:
+                    if depth_col:
                         fig = go.Figure()
                         
-                        # 元データ（処理済み - ノイズ除去後）
-                        original_df = processed_data[filename]
-                        if depth_col in original_df.columns and 'Lowess_Trend' in original_df.columns:
+                        # 1. オリジナルデータ（穿孔エネルギー）
+                        if original_data_source and filename in original_data_source:
+                            raw_df = original_data_source[filename]
+                            if depth_col in raw_df.columns and '穿孔エネルギー' in raw_df.columns:
+                                fig.add_trace(go.Scatter(
+                                    x=raw_df[depth_col],
+                                    y=raw_df['穿孔エネルギー'],
+                                    mode='lines',
+                                    name='オリジナル',
+                                    line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
+                                    hoverinfo='skip'
+                                ))
+
+                        # 2. 間引き前（ノイズ除去後）
+                        before_resample_df = processed_data[filename]
+                        if depth_col in before_resample_df.columns and 'Lowess_Trend' in before_resample_df.columns:
                             fig.add_trace(go.Scatter(
-                                x=original_df[depth_col],
-                                y=original_df['Lowess_Trend'],
+                                x=before_resample_df[depth_col],
+                                y=before_resample_df['Lowess_Trend'],
                                 mode='lines',
-                                name='ノイズ除去後',
-                                line=dict(color='white', width=1),
-                                opacity=0.5
+                                name='間引き前',
+                                line=dict(color='rgba(255, 255, 255, 0.8)', width=1.5),
                             ))
                         
-                        # 間引き後データ
-                        fig.add_trace(go.Scatter(
-                            x=df[depth_col],
-                            y=df['Lowess_Trend'],
-                            mode='markers+lines',
-                            name=f'間引き後 ({interval:.2f}m刻み)',
-                            line=dict(color=COLORS['primary'], width=2),
-                            marker=dict(size=3, color=COLORS['primary'])
-                        ))
+                        # 3. 間引き後データ
+                        if 'Lowess_Trend' in df.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df[depth_col],
+                                y=df['Lowess_Trend'],
+                                mode='markers+lines',
+                                name=f'間引き後 ({interval:.2f}m刻み)',
+                                line=dict(color=COLORS['primary'], width=2),
+                                marker=dict(size=3, color=COLORS['primary'])
+                            ))
                         
                         # X軸タイトルを設定
                         x_axis_title = '穿孔長(m)' if depth_col == '穿孔長' else depth_col

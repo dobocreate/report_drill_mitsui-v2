@@ -1,12 +1,12 @@
 """
 測点から坑口からの距離を計算するモジュール
-江川トンネル進行表の計算式を実装
+トンネル進行表の計算式を実装
 """
 
 class SurveyPointCalculator:
     """測点から坑口からの距離を計算するクラス"""
     
-    # 基準測点（江川トンネル進行表.xlsx 5行目の値）
+    # 基準測点（トンネル進行表.xlsx 5行目の値）
     REFERENCE_POINT_C = 255  # C5の値
     REFERENCE_POINT_E = 4    # E5の値
     
@@ -78,7 +78,7 @@ class SurveyPointCalculator:
             e_value: E列の値
             
         Returns:
-            フォーマットされた測点文字列（例: "254+19.4"）
+            フォーマットされた測点文字列（例: \"254+19.4\"）
         """
         if e_value == 0:
             return f"{int(c_value)}+0"
@@ -92,7 +92,7 @@ class SurveyPointCalculator:
         測点文字列をC値とE値に分解
         
         Args:
-            survey_point_str: 測点文字列（例: "254+19.4"）
+            survey_point_str: 測点文字列（例: \"254+19.4\"）
             
         Returns:
             (c_value, e_value)のタプル

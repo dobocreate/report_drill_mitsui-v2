@@ -264,6 +264,79 @@ def display_vtk_generation():
             
             # 3Dプレビューのチェックボックス（右側に配置）
             show_3d_preview = st.checkbox("📊 3D座標プレビュー")
+            
+            # カラーバー設定（3Dプレビューがオンの場合のみ表示）
+            if show_3d_preview:
+                with st.expander("🎨 カラーバー設定", expanded=False):
+                    col_cb1, col_cb2 = st.columns(2)
+                    
+                    with col_cb1:
+                        colorbar_thickness = st.slider(
+                            "幅 (px)",
+                            min_value=10,
+                            max_value=50,
+                            value=20,
+                            help="カラーバーの幅を調整"
+                        )
+                        
+                        colorbar_len = st.slider(
+                            "長さ",
+                            min_value=0.3,
+                            max_value=1.0,
+                            value=0.7,
+                            step=0.1,
+                            help="カラーバーの長さ（画面比率）"
+                        )
+                    
+                    with col_cb2:
+                        colorbar_x = st.slider(
+                            "位置 (X)",
+                            min_value=1.0,
+                            max_value=1.15,
+                            value=1.02,
+                            step=0.01,
+                            help="カラーバーのX座標位置"
+                        )
+                        
+                        # カラーマップテーマ選択
+                        colormap = st.selectbox(
+                            "カラーマップ",
+                            options=[
+                                "Jet",
+                                "Viridis",
+                                "Plasma",
+                                "Turbo",
+                                "RdYlGn",
+                                "RdBu",
+                                "Spectral",
+                                "Hot",
+                                "Cool",
+                                "Rainbow"
+                            ],
+                            index=0,
+                            help="エネルギー値の色分けテーマ"
+                        )
+                        
+                        # カラー反転
+                        reverse_colors = st.checkbox("カラーを反転", value=False)
+                        
+                        st.divider()
+                        
+                        # カラー範囲の設定（常時表示）
+                        col_min, col_max = st.columns(2)
+                        with col_min:
+                            cmin_input = st.number_input("最小値 (Min)", value=0.0, step=10.0)
+                        with col_max:
+                            cmax_input = st.number_input("最大値 (Max)", value=2000.0, step=100.0)
+            else:
+                # デフォルト値を設定
+                colorbar_thickness = 20
+                colorbar_len = 0.7
+                colorbar_x = 1.02
+                colormap = "Jet"
+                reverse_colors = False
+                cmin_input = 0.0
+                cmax_input = 2000.0
         else:
             # 処理内容の説明
             with card_container():
@@ -289,10 +362,21 @@ def display_vtk_generation():
                 左側の設定を確認し、「🚀 VTKファイル生成」ボタンをクリックしてください。
                 """)
             show_3d_preview = False
+            colorbar_thickness = 20
+            colorbar_len = 0.7
+            colorbar_x = 1.02
+            colormap = "Jet"
+            reverse_colors = False
+            cmin_input = 0.0
+            cmax_input = 2000.0
     
     # 3Dプレビューグラフ（左右カラムの外、下側に配置）
     if generated_files and show_3d_preview:
         fig = go.Figure()
+        
+        # すべてのエネルギー値の範囲を事前に計算
+        all_energy_values = []
+        trace_data = []
         
         for file_name, info in generated_files.items():
             csv_path = info['csv']
@@ -300,37 +384,59 @@ def display_vtk_generation():
                 # CSVから座標とエネルギー値を読み込む
                 preview_df = pd.read_csv(csv_path, encoding='shift-jis', skiprows=1)
                 if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', 'Z:標高(m)', '穿孔エネルギー']):
-                    # エネルギー値を取得
                     energy_values = preview_df['穿孔エネルギー']
-                    
-                    fig.add_trace(go.Scatter3d(
-                        x=preview_df['X(m)'],
-                        y=preview_df['Y(m)'],
-                        z=preview_df['Z:標高(m)'],
-                        mode='lines+markers',
-                        name=f"{info['lmr_type']}側",
-                        marker=dict(
-                            size=4,
-                            color=energy_values,  # エネルギー値で色分け
-                            colorscale='Jet',  # 青→緑→黄→赤のカラーマップ
-                            showscale=True,  # カラーバーを表示
-                            colorbar=dict(
-                                title="穿孔エネルギー",
-                                thickness=15,
-                                len=0.7,
-                                x=1.02
-                            ),
-                            cmin=energy_values.min(),
-                            cmax=energy_values.max()
-                        ),
-                        line=dict(
-                            width=2,
-                            color=energy_values,  # ラインもエネルギー値で色分け
-                            colorscale='Jet'
-                        ),
-                        text=[f"エネルギー: {e:.1f}" for e in energy_values],
-                        hovertemplate='X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>%{text}<extra></extra>'
-                    ))
+                    all_energy_values.extend(energy_values.tolist())
+                    trace_data.append({
+                        'df': preview_df,
+                        'energy': energy_values,
+                        'lmr_type': info['lmr_type']
+                    })
+        
+        # 統一されたエネルギー範囲
+        if all_energy_values:
+            # カラーマップの反転処理
+            actual_colormap = colormap + "_r" if reverse_colors else colormap
+            
+            # 手動設定の適用（常時）
+            final_cmin = cmin_input
+            final_cmax = cmax_input
+            
+            # トレースを追加
+            for idx, data in enumerate(trace_data):
+                preview_df = data['df']
+                energy_values = data['energy']
+                
+                fig.add_trace(go.Scatter3d(
+                    x=preview_df['X(m)'],
+                    y=preview_df['Y(m)'],
+                    z=preview_df['Z:標高(m)'],
+                    mode='lines+markers',
+                    name=f"{data['lmr_type']}側",
+                    showlegend=False,  # 凡例を非表示
+                    marker=dict(
+                        size=4,
+                        color=energy_values,  # エネルギー値で色分け
+                        colorscale=actual_colormap,  # 反転考慮後のカラーマップ
+                        showscale=(idx == 0),  # 最初のトレースのみカラーバー表示
+                        colorbar=dict(
+                            title="穿孔エネルギー",
+                            thickness=colorbar_thickness,  # UI設定値を使用
+                            len=colorbar_len,              # UI設定値を使用
+                            x=colorbar_x                   # UI設定値を使用
+                        ) if idx == 0 else None,
+                        cmin=final_cmin,  # 設定された最小値
+                        cmax=final_cmax   # 設定された最大値
+                    ),
+                    line=dict(
+                        width=2,
+                        color=energy_values,  # ラインもエネルギー値で色分け
+                        colorscale=actual_colormap,  # 反転考慮後のカラーマップ
+                        cmin=final_cmin,      # 設定された最小値
+                        cmax=final_cmax       # 設定された最大値
+                    ),
+                    text=[f"エネルギー: {e:.1f}" for e in energy_values],
+                    hovertemplate='X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>%{text}<extra></extra>'
+                ))
         
         fig.update_layout(
             scene=dict(

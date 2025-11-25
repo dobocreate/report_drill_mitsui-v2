@@ -70,21 +70,12 @@ class LMRCoordinateCalculator:
         トンネル坑口からの距離を基に座標を計算
         
         Args:
-            distance_from_entrance: トンネル坑口からの距離（I列の値、ユーザー入力）
-            direction_angle: 向きの角度（省略時は固定値65.588を使用）
-            reference_distance: 基準点の距離（省略時は固定値967を使用）
+            distance_from_entrance: トンネル坑口からの距離
+            direction_angle: 方向角度(省略時はデフォルト値)
+            reference_distance: 基準距離(省略時はデフォルト値)
         
         Returns:
-            計算された座標の辞書 {
-                'L_X': L側X座標（Q列）,
-                'L_Y': L側Y座標（R列）,
-                'M_X': M側X座標（S列）,
-                'M_Y': M側Y座標（T列）,
-                'R_X': R側X座標（U列）,
-                'R_Y': R側Y座標（V列）,
-                'direction': 向き（W列）,
-                'distance': 入力された距離
-            }
+            計算結果の辞書(L_X, L_Y, M_X, M_Y, R_X, R_Y, direction, distance)
         """
         # デフォルト値を使用
         if direction_angle is None:
@@ -92,7 +83,7 @@ class LMRCoordinateCalculator:
         if reference_distance is None:
             reference_distance = self.REFERENCE_DISTANCE
         
-        # 距離の差分を計算（mm単位）
+        # 距離の差分を計算(mm単位)
         distance_diff = (distance_from_entrance - reference_distance) * 1000
         
         # 角度をラジアンに変換
@@ -102,7 +93,7 @@ class LMRCoordinateCalculator:
         cos_val = math.cos(angle_rad)
         sin_val = math.sin(angle_rad)
         
-        # 各座標を計算（Excel数式の再現）
+        # 各座標を計算(Excel数式の再現)
         # 基準座標はすでにメートル単位なので、そのまま使用
         # Q列: =ROUND((-($I1245-$I$974)*1000*COS((90-$W1245)*PI()/180)+Q$974)/1000,3)
         l_x = round((-distance_diff * cos_val + self.reference_coords.get('Q', 0)) / 1000, 3)
@@ -122,6 +113,12 @@ class LMRCoordinateCalculator:
         # V列: =ROUND((($I1245-$I$974)*1000*SIN((90-$W1245)*PI()/180)+V$974)/1000,3)
         r_y = round((distance_diff * sin_val + self.reference_coords.get('V', 0)) / 1000, 3)
         
+        # 補正処理: M座標をLとRの中点に合わせる
+        # ユーザー指摘「穿孔エネルギーのスタート位置は直線上に並ぶはずですが、真ん中のMだけ少し出ています」に対応
+        # 幾何学的にM(天端)の平面座標はLとRの中点にあるべきと仮定
+        m_x = round((l_x + r_x) / 2, 3)
+        m_y = round((l_y + r_y) / 2, 3)
+        
         return {
             'L_X': l_x,
             'L_Y': l_y,
@@ -139,7 +136,7 @@ class LMRCoordinateCalculator:
         
         Args:
             excel_path: Excelファイルのパス
-            sheet_name: シート名（省略時はアクティブシート）
+            sheet_name: シート名(省略時はアクティブシート)
         """
         import openpyxl
         
@@ -147,13 +144,14 @@ class LMRCoordinateCalculator:
         sheet = wb[sheet_name] if sheet_name else wb.active
         
         # 基準点（974行目）の座標を読み込む
+        ref_row = 974
         self.reference_coords = {
-            'Q': sheet[f'Q{self.reference_point}'].value or 0,
-            'R': sheet[f'R{self.reference_point}'].value or 0,
-            'S': sheet[f'S{self.reference_point}'].value or 0,
-            'T': sheet[f'T{self.reference_point}'].value or 0,
-            'U': sheet[f'U{self.reference_point}'].value or 0,
-            'V': sheet[f'V{self.reference_point}'].value or 0
+            'Q': sheet[f'Q{ref_row}'].value or 0,
+            'R': sheet[f'R{ref_row}'].value or 0,
+            'S': sheet[f'S{ref_row}'].value or 0,
+            'T': sheet[f'T{ref_row}'].value or 0,
+            'U': sheet[f'U{ref_row}'].value or 0,
+            'V': sheet[f'V{ref_row}'].value or 0
         }
         
         wb.close()
@@ -185,7 +183,7 @@ class LMRCoordinateCalculator:
         return pd.DataFrame(results)
     
     def validate_calculation(self, expected: Dict, calculated: Dict, tolerance: float = 0.001) -> bool:
-        """
+        '''
         計算結果の検証
         
         Args:
@@ -194,10 +192,10 @@ class LMRCoordinateCalculator:
             tolerance: 許容誤差
         
         Returns:
-            検証結果（True: 一致、False: 不一致）
-        """
-        for key in ['L_X', 'L_Y', 'M_X', 'M_Y', 'R_X', 'R_Y']:
-            if key in expected and key in calculated:
+            検証結果(True: 許容範囲内, False: 許容範囲外)
+        '''
+        for key in expected:
+            if key in calculated:
                 if abs(expected[key] - calculated[key]) > tolerance:
                     return False
         return True
