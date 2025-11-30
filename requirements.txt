@@ -1,23 +1,4 @@
-# Core dependencies
-streamlit>=1.28.0,<2.0.0
-plotly>=5.17.0,<6.0.0
-pandas>=2.0.0,<3.0.0
-numpy>=1.24.0,<2.0.0
-matplotlib>=3.7.0,<4.0.0
-
-# Data processing
-chardet>=5.2.0
-statsmodels>=0.14.0,<0.15.0
-
-# Optional for enhanced features
-openpyxl>=3.1.0
-python-dateutil>=2.8.0
-
-# Testing (development only - not needed for production)
-# pytest>=7.0.0
-
-# VTK support (DISABLED for Streamlit Cloud compatibility)
-# VTK has complex system dependencies that often fail on cloud platforms
-# The app will work without VTK, with limited 3D export features
-# To enable VTK locally: pip install vtk>=9.2.6
-# vtk>=9.2.6,<9.4.0
+streamlit
+plotly
+pandas
+numpy
