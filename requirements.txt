@@ -5,16 +5,17 @@ pandas>=2.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
 
-# VTK support
-vtk==9.2.6
-
 # Data processing
 chardet>=5.2.0
 statsmodels>=0.14.0
 
-# Testing
-pytest>=7.0.0
-
 # Optional for enhanced features
 openpyxl>=3.1.0  # Excel file support
 python-dateutil>=2.8.0  # Date parsing
+
+# Testing (development only)
+pytest>=7.0.0
+
+# VTK support (optional, may have issues on some cloud platforms)
+# If VTK installation fails, the app will still work with limited 3D features
+vtk>=9.2.6,<9.4.0
