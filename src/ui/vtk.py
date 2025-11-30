@@ -26,14 +26,13 @@ def display_vtk_generation():
     # 測点計算機の初期化
     survey_calc = SurveyPointCalculator()
     
-    # VTKライブラリの確認
+    # VTKライブラリの確認（ライブラリなしでもテキスト形式で生成可能）
+    vtk_available = True
     try:
         import vtk
-        vtk_available = True
     except ImportError:
-        vtk_available = False
-        st.warning("⚠️ VTKライブラリがインストールされていません。VTKファイル生成機能が制限されます。")
-        st.info("インストール方法: `pip install vtk`")
+        # VTKライブラリがない場合は自前のコンバータがテキスト形式で出力します
+        pass
     
     # メインレイアウト: 左右1:1
     col_left, col_right = st.columns([1, 1])
