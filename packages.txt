@@ -1,2 +1,0 @@
-# System dependencies for Streamlit Cloud
-# Currently empty - VTK dependencies removed for compatibility
