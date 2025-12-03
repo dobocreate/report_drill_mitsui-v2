@@ -317,7 +317,7 @@ def display_vtk_generation():
                         )
                         
                         # カラー反転
-                        reverse_colors = st.checkbox("カラーを反転", value=False)
+                        reverse_colors = st.checkbox("カラーを反転", value=True)
                         
                         st.divider()
                         
@@ -333,7 +333,7 @@ def display_vtk_generation():
                 colorbar_len = 0.7
                 colorbar_x = 1.02
                 colormap = "Jet"
-                reverse_colors = False
+                reverse_colors = True
                 cmin_input = 0.0
                 cmax_input = 2000.0
         else:
@@ -365,7 +365,7 @@ def display_vtk_generation():
             colorbar_len = 0.7
             colorbar_x = 1.02
             colormap = "Jet"
-            reverse_colors = False
+            reverse_colors = True
             cmin_input = 0.0
             cmax_input = 2000.0
     
