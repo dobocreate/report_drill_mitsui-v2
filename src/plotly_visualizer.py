@@ -21,49 +21,48 @@ class PlotlyVisualizer:
         # カラーテーマ
         self.color_palette = px.colors.qualitative.Set2
         
-    def create_3d_trajectory(
+    def create_xy_scatter(
         self,
         data_dict: Dict[str, pd.DataFrame],
         file_names: List[str],
         show_energy: bool = True,
         colorscale: str = None
     ) -> go.Figure:
-        """3D軌跡グラフの作成
-        
+        """XY散布図の作成
+
         Args:
             data_dict: ファイル名とデータフレームの辞書
             file_names: 表示するファイル名のリスト
             show_energy: エネルギー値を色で表示するか
             colorscale: カラースケール
-            
+
         Returns:
             Plotly Figure オブジェクト
         """
-        
+
         colorscale = colorscale or self.default_colorscale
         fig = go.Figure()
-        
+
         for i, file_name in enumerate(file_names):
             if file_name not in data_dict:
                 continue
-            
+
             df = data_dict[file_name]
-            
+
             # 座標データの取得
             x, y, z = self._extract_coordinates(df)
-            
+
             if show_energy:
                 # エネルギー値を色として使用
                 energy = self._extract_energy(df)
-                
-                fig.add_trace(go.Scatter3d(
+
+                fig.add_trace(go.Scatter(
                     x=x,
                     y=y,
-                    z=z,
-                    mode='markers+lines',
+                    mode='markers',
                     name=file_name,
                     marker=dict(
-                        size=self.default_marker_size,
+                        size=self.default_marker_size + 3,
                         color=energy,
                         colorscale=colorscale,
                         showscale=i == 0,  # 最初のトレースのみカラーバー表示
@@ -73,46 +72,31 @@ class PlotlyVisualizer:
                             len=0.7,
                             x=1.02
                         ),
-                        line=dict(width=0)
+                        line=dict(width=1, color='DarkSlateGrey')
                     ),
-                    line=dict(
-                        color=self.color_palette[i % len(self.color_palette)],
-                        width=self.default_line_width
-                    ),
-                    text=[f"深度: {z_val:.1f}m<br>エネルギー: {e:.1f}" 
-                          for z_val, e in zip(z, energy)],
+                    text=[f"X: {x_val:.2f}m<br>Y: {y_val:.2f}m<br>エネルギー: {e:.1f}"
+                          for x_val, y_val, e in zip(x, y, energy)],
                     hovertemplate="%{text}<extra>%{fullData.name}</extra>"
                 ))
             else:
                 # 単色表示
-                fig.add_trace(go.Scatter3d(
+                fig.add_trace(go.Scatter(
                     x=x,
                     y=y,
-                    z=z,
-                    mode='markers+lines',
+                    mode='markers',
                     name=file_name,
                     marker=dict(
-                        size=self.default_marker_size,
-                        color=self.color_palette[i % len(self.color_palette)]
-                    ),
-                    line=dict(
+                        size=self.default_marker_size + 3,
                         color=self.color_palette[i % len(self.color_palette)],
-                        width=self.default_line_width
+                        line=dict(width=1, color='DarkSlateGrey')
                     )
                 ))
-        
+
         # レイアウト設定
         fig.update_layout(
-            title="削孔軌跡 3D表示",
-            scene=dict(
-                xaxis_title="X座標 (m)",
-                yaxis_title="Y座標 (m)",
-                zaxis_title="Z座標 (m)",
-                camera=dict(
-                    eye=dict(x=1.5, y=1.5, z=1.5)
-                ),
-                aspectmode='data'
-            ),
+            title="削孔軌跡 XY散布図",
+            xaxis_title="X座標 (m)",
+            yaxis_title="Y座標 (m)",
             height=700,
             showlegend=True,
             legend=dict(
@@ -120,9 +104,14 @@ class PlotlyVisualizer:
                 y=0.99,
                 xanchor="left",
                 x=0.01
-            )
+            ),
+            hovermode='closest'
         )
-        
+
+        # グリッド表示
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', scaleanchor="y", scaleratio=1)
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+
         return fig
     
     def create_depth_energy_plot(

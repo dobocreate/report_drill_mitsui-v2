@@ -261,11 +261,11 @@ def display_vtk_generation():
                                 key=f"download_csv_{file_name}"
                             )
             
-            # 3Dプレビューのチェックボックス（右側に配置）
-            show_3d_preview = st.checkbox("📊 3D座標プレビュー")
-            
-            # カラーバー設定（3Dプレビューがオンの場合のみ表示）
-            if show_3d_preview:
+            # XY散布図プレビューのチェックボックス（右側に配置）
+            show_xy_preview = st.checkbox("📊 XY散布図プレビュー")
+
+            # カラーバー設定（プレビューがオンの場合のみ表示）
+            if show_xy_preview:
                 with st.expander("🎨 カラーバー設定", expanded=False):
                     col_cb1, col_cb2 = st.columns(2)
                     
@@ -342,25 +342,25 @@ def display_vtk_generation():
                 st.subheader("📋 処理内容")
                 st.markdown("""
                 このページでは、削孔検層データをVTK形式に変換します。
-                
+
                 **処理の流れ:**
                 1. **ファイル選択**: VTK化するファイルをチェックボックスで選択
                 2. **設定確認**: 坑口からの距離と詳細パラメータを確認
                 3. **VTK生成**: ボタンをクリックして変換を実行
                 4. **ダウンロード**: 生成されたVTKファイルと3D座標CSVをダウンロード
-                
+
                 **生成されるファイル:**
                 - **VTKファイル**: 3D可視化ソフトウェア（ParaView等）で使用
                 - **3D座標CSV**: X, Y, Z座標とエネルギー値を含むCSVファイル
-                
+
                 **詳細設定:**
                 - 座標計算パラメータ（基準距離、方向角度）
                 - Z標高（L側、M側、R側）
                 - サンプリング間隔（データ点の間引き）
-                
+
                 左側の設定を確認し、「🚀 VTKファイル生成」ボタンをクリックしてください。
                 """)
-            show_3d_preview = False
+            show_xy_preview = False
             colorbar_thickness = 20
             colorbar_len = 0.7
             colorbar_x = 1.02
@@ -369,20 +369,20 @@ def display_vtk_generation():
             cmin_input = 0.0
             cmax_input = 2000.0
     
-    # 3Dプレビューグラフ（左右カラムの外、下側に配置）
-    if generated_files and show_3d_preview:
+    # XY散布図プレビューグラフ（左右カラムの外、下側に配置）
+    if generated_files and show_xy_preview:
         fig = go.Figure()
-        
+
         # すべてのエネルギー値の範囲を事前に計算
         all_energy_values = []
         trace_data = []
-        
+
         for file_name, info in generated_files.items():
             csv_path = info['csv']
             if Path(csv_path).exists():
                 # CSVから座標とエネルギー値を読み込む
                 preview_df = pd.read_csv(csv_path, encoding='shift-jis', skiprows=1)
-                if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', 'Z:標高(m)', '穿孔エネルギー']):
+                if all(col in preview_df.columns for col in ['X(m)', 'Y(m)', '穿孔エネルギー']):
                     energy_values = preview_df['穿孔エネルギー']
                     all_energy_values.extend(energy_values.tolist())
                     trace_data.append({
@@ -390,30 +390,29 @@ def display_vtk_generation():
                         'energy': energy_values,
                         'lmr_type': info['lmr_type']
                     })
-        
+
         # 統一されたエネルギー範囲
         if all_energy_values:
             # カラーマップの反転処理
             actual_colormap = colormap + "_r" if reverse_colors else colormap
-            
+
             # 手動設定の適用（常時）
             final_cmin = cmin_input
             final_cmax = cmax_input
-            
+
             # トレースを追加
             for idx, data in enumerate(trace_data):
                 preview_df = data['df']
                 energy_values = data['energy']
-                
-                fig.add_trace(go.Scatter3d(
+
+                fig.add_trace(go.Scatter(
                     x=preview_df['X(m)'],
                     y=preview_df['Y(m)'],
-                    z=preview_df['Z:標高(m)'],
-                    mode='lines+markers',
+                    mode='markers',
                     name=f"{data['lmr_type']}側",
-                    showlegend=False,  # 凡例を非表示
+                    showlegend=True,
                     marker=dict(
-                        size=4,
+                        size=8,
                         color=energy_values,  # エネルギー値で色分け
                         colorscale=actual_colormap,  # 反転考慮後のカラーマップ
                         showscale=(idx == 0),  # 最初のトレースのみカラーバー表示
@@ -424,28 +423,22 @@ def display_vtk_generation():
                             x=colorbar_x                   # UI設定値を使用
                         ) if idx == 0 else None,
                         cmin=final_cmin,  # 設定された最小値
-                        cmax=final_cmax   # 設定された最大値
-                    ),
-                    line=dict(
-                        width=2,
-                        color=energy_values,  # ラインもエネルギー値で色分け
-                        colorscale=actual_colormap,  # 反転考慮後のカラーマップ
-                        cmin=final_cmin,      # 設定された最小値
-                        cmax=final_cmax       # 設定された最大値
+                        cmax=final_cmax,  # 設定された最大値
+                        line=dict(width=1, color='DarkSlateGrey')
                     ),
                     text=[f"エネルギー: {e:.1f}" for e in energy_values],
-                    hovertemplate='X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>%{text}<extra></extra>'
+                    hovertemplate='X: %{x:.2f}m<br>Y: %{y:.2f}m<br>%{text}<extra></extra>'
                 ))
-        
+
         fig.update_layout(
-            scene=dict(
-                xaxis_title='X (m)',
-                yaxis_title='Y (m)',
-                zaxis_title='Z:標高 (m)',
-                aspectmode='data'
-            ),
+            xaxis_title='X (m)',
+            yaxis_title='Y (m)',
             height=600,
-            title=f"削孔検層3D軌跡（坑口から{distance_from_entrance}m）- エネルギー値による色分け"
+            title=f"削孔検層 XY散布図（坑口から{distance_from_entrance}m）- エネルギー値による色分け",
+            hovermode='closest'
         )
+        # XY軸のスケールを等しくする
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', scaleanchor="y", scaleratio=1)
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
         st.plotly_chart(fig, use_container_width=True)
 
