@@ -326,7 +326,7 @@ def display_vtk_generation():
                         with col_min:
                             cmin_input = st.number_input("最小値 (Min)", value=0.0, step=10.0)
                         with col_max:
-                            cmax_input = st.number_input("最大値 (Max)", value=2000.0, step=100.0)
+                            cmax_input = st.number_input("最大値 (Max)", value=300.0, step=100.0)
             else:
                 # デフォルト値を設定
                 colorbar_thickness = 20
@@ -335,7 +335,7 @@ def display_vtk_generation():
                 colormap = "Jet"
                 reverse_colors = False
                 cmin_input = 0.0
-                cmax_input = 2000.0
+                cmax_input = 300.0
         else:
             # 処理内容の説明
             with card_container():
@@ -367,7 +367,7 @@ def display_vtk_generation():
             colormap = "Jet"
             reverse_colors = False
             cmin_input = 0.0
-            cmax_input = 2000.0
+            cmax_input = 300.0
     
     # 3Dプレビューグラフ（左右カラムの外、下側に配置）
     if generated_files and show_3d_preview:
