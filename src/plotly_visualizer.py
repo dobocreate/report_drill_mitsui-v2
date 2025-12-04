@@ -67,10 +67,10 @@ class PlotlyVisualizer:
                         colorscale=colorscale,
                         showscale=i == 0,  # 最初のトレースのみカラーバー表示
                         colorbar=dict(
-                            title="エネルギー",
+                            title="穿孔エネルギー (kJ)",
                             thickness=20,
                             len=0.7,
-                            x=1.02
+                            x=1.05
                         ),
                         line=dict(width=1, color='DarkSlateGrey')
                     ),
@@ -103,14 +103,16 @@ class PlotlyVisualizer:
                 yanchor="top",
                 y=0.99,
                 xanchor="left",
-                x=0.01
+                x=0.01,
+                bordercolor="Black",
+                borderwidth=1
             ),
             hovermode='closest'
         )
 
-        # グリッド表示
-        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', scaleanchor="y", scaleratio=1)
-        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        # グリッド非表示
+        fig.update_xaxes(showgrid=False, scaleanchor="y", scaleratio=1)
+        fig.update_yaxes(showgrid=False)
 
         return fig
     
