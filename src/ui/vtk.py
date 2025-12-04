@@ -277,7 +277,7 @@ def display_vtk_generation():
                             value=20,
                             help="カラーバーの幅を調整"
                         )
-                        
+
                         colorbar_len = st.slider(
                             "長さ",
                             min_value=0.3,
@@ -286,8 +286,7 @@ def display_vtk_generation():
                             step=0.1,
                             help="カラーバーの長さ（画面比率）"
                         )
-                    
-                    with col_cb2:
+
                         colorbar_x = st.slider(
                             "位置 (X)",
                             min_value=1.0,
@@ -296,7 +295,8 @@ def display_vtk_generation():
                             step=0.01,
                             help="カラーバーのX座標位置"
                         )
-                        
+
+                    with col_cb2:
                         # カラーマップテーマ選択
                         colormap = st.selectbox(
                             "カラーマップ",
@@ -315,18 +315,13 @@ def display_vtk_generation():
                             index=0,
                             help="エネルギー値の色分けテーマ"
                         )
-                        
+
                         # カラー反転
                         reverse_colors = st.checkbox("カラーを反転", value=True)
-                        
-                        st.divider()
-                        
-                        # カラー範囲の設定（常時表示）
-                        col_min, col_max = st.columns(2)
-                        with col_min:
-                            cmin_input = st.number_input("最小値 (Min)", value=0.0, step=10.0)
-                        with col_max:
-                            cmax_input = st.number_input("最大値 (Max)", value=300.0, step=100.0)
+
+                        # カラー範囲の設定
+                        cmin_input = st.number_input("最小値 (Min)", value=0.0, step=10.0)
+                        cmax_input = st.number_input("最大値 (Max)", value=300.0, step=100.0)
             else:
                 # デフォルト値を設定
                 colorbar_thickness = 20
